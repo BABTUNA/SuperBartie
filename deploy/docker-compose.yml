@@ -163,6 +163,26 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # Steady, readable writes to the source so the page has something to show.
+  # Same image as the databases (it only needs psql). TRAFFIC_INTERVAL=0
+  # disables it by exiting immediately.
+  traffic:
+    profiles: ["live"]
+    image: postgres:16
+    container_name: bartie-traffic
+    entrypoint: ["bash", "-c", "[ \"$$TRAFFIC_INTERVAL\" = 0 ] && exit 0; exec /demo-traffic.sh"]
+    environment:
+      PGHOST: source
+      PGUSER: postgres
+      PGPASSWORD: bartie
+      PGDATABASE: terra
+      TRAFFIC_INTERVAL: ${TRAFFIC_INTERVAL:-2}
+    volumes:
+      - ../scripts/demo-traffic.sh:/demo-traffic.sh:ro
+    depends_on:
+      source: { condition: service_healthy }
+    restart: on-failure
+
   caddy:
     profiles: ["live"]
     image: caddy:2-alpine

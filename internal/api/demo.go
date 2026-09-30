@@ -231,6 +231,61 @@ func demoUpdate(ctx context.Context, tx pgx.Tx, table string, spec demoTable, pk
 	return nil
 }
 
+// readTables is the read-only allowlist for the table panel: every replicated
+// table, with the column that says "recently changed" on that table.
+var readTables = map[string]struct{ pk, recency string }{
+	"public.animals":        {pk: "animal_id", recency: "updated_at"},
+	"public.observations":   {pk: "observation_id", recency: "observed_at"},
+	"public.watering_holes": {pk: "watering_hole_id", recency: "created_at"},
+}
+
+// handleTable returns the most recently changed rows of one table from both
+// databases, so a page can show traffic landing. Destination rows carry the
+// pipeline's metadata columns, which is how the page knows a row is fresh.
+func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
+	table := r.PathValue("table")
+	spec, ok := readTables[table]
+	if !ok {
+		writeError(w, http.StatusBadRequest, "table not in demo allowlist")
+		return
+	}
+	limit := 10
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 50 {
+			limit = n
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	q := fmt.Sprintf(`SELECT row_to_json(t) FROM %s t ORDER BY %s DESC, %s DESC LIMIT $1`,
+		quoteTable(table), quoteIdent(spec.recency), quoteIdent(spec.pk))
+	read := func(pool interface {
+		Query(context.Context, string, ...any) (pgx.Rows, error)
+	}) []json.RawMessage {
+		out := []json.RawMessage{}
+		rows, err := pool.Query(ctx, q, limit)
+		if err != nil {
+			return out // table may not exist on the destination yet
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var raw json.RawMessage
+			if rows.Scan(&raw) == nil {
+				out = append(out, raw)
+			}
+		}
+		return out
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"table":   table,
+		"pk":      spec.pk,
+		"recency": spec.recency,
+		"source":  read(s.source),
+		"dest":    read(s.dest),
+	})
+}
+
 // handleRow shows the same row on both sides, so the page can render "source
 // says X, destination says X, applied at T".
 func (s *Server) handleRow(w http.ResponseWriter, r *http.Request) {
