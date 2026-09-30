@@ -13,6 +13,7 @@ import (
 	"github.com/BABTUNA/bartie/internal/backfill"
 	"github.com/BABTUNA/bartie/internal/config"
 	"github.com/BABTUNA/bartie/internal/events"
+	"github.com/BABTUNA/bartie/internal/metrics"
 )
 
 const standbyInterval = 5 * time.Second
@@ -61,12 +62,14 @@ func (r *Reader) Run(ctx context.Context) error {
 	// This must happen while the replication connection is still idle, or the
 	// exported snapshot is invalidated. Backfill uses its own connection.
 	if r.slotState.Fresh {
+		metrics.SetPhase("backfill")
 		slog.Info("fresh slot: starting backfill", "snapshot", r.slotState.SnapshotName)
 		if err := backfill.Run(ctx, r.cfg.SourceDSN, r.cfg.Publication, r.slotState.SnapshotName, r.pub); err != nil {
 			return fmt.Errorf("backfill: %w", err)
 		}
 		slog.Info("backfill complete, starting live replication")
 	}
+	metrics.SetPhase("streaming")
 
 	// startLSN 0 means "resume from the slot's confirmed position": exactly
 	// what we want on both first run and restart.

@@ -10,6 +10,22 @@ import (
 	"github.com/BABTUNA/bartie/internal/config"
 )
 
+// TableResult is one table's source-vs-destination comparison.
+type TableResult struct {
+	Table         string `json:"table"`
+	SourceRows    int64  `json:"sourceRows"`
+	DestRows      int64  `json:"destRows"`
+	ChecksumMatch bool   `json:"checksumMatch"`
+	Detail        string `json:"detail,omitempty"` // why it did not match, when it did not
+}
+
+// Result is one full pass over every replicated table.
+type Result struct {
+	Tables    []TableResult `json:"tables"`
+	Match     bool          `json:"match"`
+	CheckedAt time.Time     `json:"checkedAt"`
+}
+
 // Run compares every replicated table on the source against the destination,
 // retrying until they match or the timeout expires. Retrying exists because a
 // live pipeline has in-flight events: failure is never converging, not a
@@ -18,74 +34,126 @@ import (
 // It knows nothing about the reader, writer, or Kafka: it reads both ends and
 // nothing else, which is what makes its MATCH trustworthy.
 func Run(ctx context.Context, cfg config.Config, timeout time.Duration) error {
-	source, err := pgxpool.New(ctx, cfg.SourceDSN)
-	if err != nil {
-		return fmt.Errorf("connect source: %w", err)
-	}
-	defer source.Close()
-	dest, err := pgxpool.New(ctx, cfg.DestDSN)
-	if err != nil {
-		return fmt.Errorf("connect dest: %w", err)
-	}
-	defer dest.Close()
-
-	tables, err := listTables(ctx, source, cfg.Publication)
+	res, err := Converge(ctx, cfg, timeout)
 	if err != nil {
 		return err
 	}
+	if res.Match {
+		fmt.Printf("VERIFY: all %d tables MATCH\n", len(res.Tables))
+		return nil
+	}
+	n := 0
+	for _, t := range res.Tables {
+		if !t.ChecksumMatch {
+			n++
+			fmt.Println("MISMATCH:", t.Table+":", t.Detail)
+		}
+	}
+	return fmt.Errorf("verify failed: %d of %d tables did not converge within %s", n, len(res.Tables), timeout)
+}
+
+// Converge runs Compare until every table matches or the timeout passes, and
+// returns the last result either way.
+func Converge(ctx context.Context, cfg config.Config, timeout time.Duration) (Result, error) {
+	source, dest, shapes, err := open(ctx, cfg)
+	if err != nil {
+		return Result{}, err
+	}
+	defer source.Close()
+	defer dest.Close()
+
+	deadline := time.Now().Add(timeout)
+	for {
+		res, err := compareAll(ctx, source, dest, shapes)
+		if err != nil {
+			return Result{}, err
+		}
+		if res.Match || time.Now().After(deadline) {
+			return res, nil
+		}
+		select {
+		case <-ctx.Done():
+			return res, ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
+// Compare is a single pass with no retry: what the api serves.
+func Compare(ctx context.Context, cfg config.Config) (Result, error) {
+	source, dest, shapes, err := open(ctx, cfg)
+	if err != nil {
+		return Result{}, err
+	}
+	defer source.Close()
+	defer dest.Close()
+	return compareAll(ctx, source, dest, shapes)
+}
+
+func open(ctx context.Context, cfg config.Config) (*pgxpool.Pool, *pgxpool.Pool, []tableShape, error) {
+	source, err := pgxpool.New(ctx, cfg.SourceDSN)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("connect source: %w", err)
+	}
+	dest, err := pgxpool.New(ctx, cfg.DestDSN)
+	if err != nil {
+		source.Close()
+		return nil, nil, nil, fmt.Errorf("connect dest: %w", err)
+	}
+
+	tables, err := listTables(ctx, source, cfg.Publication)
+	if err != nil {
+		source.Close()
+		dest.Close()
+		return nil, nil, nil, err
+	}
 	if len(tables) == 0 {
-		return fmt.Errorf("publication %q covers no tables", cfg.Publication)
+		source.Close()
+		dest.Close()
+		return nil, nil, nil, fmt.Errorf("publication %q covers no tables", cfg.Publication)
 	}
 
 	shapes := make([]tableShape, 0, len(tables))
 	for _, tbl := range tables {
 		shape, err := loadShape(ctx, source, tbl)
 		if err != nil {
-			return err
+			source.Close()
+			dest.Close()
+			return nil, nil, nil, err
 		}
 		shapes = append(shapes, shape)
 	}
-
-	deadline := time.Now().Add(timeout)
-	for {
-		mismatches, err := compareAll(ctx, source, dest, shapes)
-		if err != nil {
-			return err
-		}
-		if len(mismatches) == 0 {
-			fmt.Printf("VERIFY: all %d tables MATCH\n", len(shapes))
-			return nil
-		}
-		if time.Now().After(deadline) {
-			for _, m := range mismatches {
-				fmt.Println("MISMATCH:", m)
-			}
-			return fmt.Errorf("verify failed: %d of %d tables did not converge within %s", len(mismatches), len(shapes), timeout)
-		}
-		time.Sleep(2 * time.Second)
-	}
+	return source, dest, shapes, nil
 }
 
-func compareAll(ctx context.Context, source, dest *pgxpool.Pool, shapes []tableShape) ([]string, error) {
-	var mismatches []string
+func compareAll(ctx context.Context, source, dest *pgxpool.Pool, shapes []tableShape) (Result, error) {
+	res := Result{Match: true, CheckedAt: time.Now().UTC()}
 	for _, shape := range shapes {
 		srcCS, err := checksum(ctx, source, shape)
 		if err != nil {
-			return nil, err
+			return Result{}, err
 		}
+		tr := TableResult{Table: shape.Table, SourceRows: srcCS.Count}
 		destCS, err := checksum(ctx, dest, shape)
-		if err != nil {
+		switch {
+		case err != nil:
 			// The dest table may not exist yet (no events seen): a mismatch,
 			// not a fatal error, so the retry loop can wait it out.
-			mismatches = append(mismatches, fmt.Sprintf("%s: dest not readable (%v)", shape.Table, err))
-			continue
+			tr.Detail = fmt.Sprintf("dest not readable (%v)", err)
+		case srcCS != destCS:
+			tr.DestRows = destCS.Count
+			tr.Detail = fmt.Sprintf("source{n=%d %s} dest{n=%d %s}",
+				srcCS.Count, short(srcCS.Digest), destCS.Count, short(destCS.Digest))
+		default:
+			tr.DestRows = destCS.Count
+			tr.ChecksumMatch = true
 		}
-		if srcCS != destCS {
-			mismatches = append(mismatches, fmt.Sprintf("%s: source{n=%d %s} dest{n=%d %s}",
-				shape.Table, srcCS.Count, short(srcCS.Digest), destCS.Count, short(destCS.Digest)))
+		if !tr.ChecksumMatch {
+			res.Match = false
 		}
+		res.Tables = append(res.Tables, tr)
 	}
-	return mismatches, nil
+	return res, nil
 }
 
 func listTables(ctx context.Context, source *pgxpool.Pool, publication string) ([]string, error) {

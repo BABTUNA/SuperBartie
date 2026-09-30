@@ -1,0 +1,23 @@
+# Fronts the control api. API_DOMAIN comes from the environment:
+#   api.example.com          -> automatic HTTPS via Let's Encrypt
+#   http://localhost:8088    -> plain HTTP, for running the live profile locally
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Only what the page and the MCP need. Pipeline metrics ports are never
+	# published; the api scrapes them over the compose network.
+	reverse_proxy api:8080 {
+		header_up X-Forwarded-For {remote_host}
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

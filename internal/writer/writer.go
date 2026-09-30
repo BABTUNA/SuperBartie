@@ -12,6 +12,7 @@ import (
 
 	"github.com/BABTUNA/bartie/internal/config"
 	"github.com/BABTUNA/bartie/internal/events"
+	"github.com/BABTUNA/bartie/internal/metrics"
 )
 
 const (
@@ -60,7 +61,19 @@ func (w *Writer) Close() error {
 // committed on the destination. A crash anywhere re-delivers the batch, and
 // the merge re-asserts the same final states.
 func (w *Writer) Run(ctx context.Context) error {
+	metrics.SetPhase("running")
 	for {
+		// Paused (via the metrics control endpoint): stop consuming so backlog
+		// visibly builds on the broker. Anything already buffered waits too.
+		if metrics.Paused() {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(200 * time.Millisecond):
+			}
+			continue
+		}
+
 		fetchCtx := ctx
 		var cancel context.CancelFunc
 		if !w.buffer.Empty() {
@@ -105,9 +118,12 @@ func (w *Writer) flushAll(ctx context.Context) error {
 
 	total := 0
 	for table, evts := range tables {
+		start := time.Now()
 		if err := flushTable(ctx, w.pool, w.ddl, table, evts); err != nil {
+			metrics.RecordError(table, "flush failed", err)
 			return err
 		}
+		metrics.RecordFlush(table, len(evts), time.Since(start))
 		total += len(evts)
 	}
 
