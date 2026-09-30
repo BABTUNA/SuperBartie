@@ -145,12 +145,15 @@ WHERE __bartie_updated_at >= $1 AND __bartie_updated_at < $2
 }
 
 // destTables lists replicated tables on the destination: anything the writer
-// stamped with its metadata column.
+// stamped with its metadata column, minus the vector destination's own
+// tables, which carry the same columns but are derived data with their own
+// (embedding-bound) latency.
 func (s *Server) destTables(ctx context.Context) ([]string, error) {
 	rows, err := s.dest.Query(ctx, `
 SELECT table_schema || '.' || table_name
 FROM information_schema.columns
 WHERE column_name = '__bartie_commit_ts'
+  AND table_name NOT LIKE 'bartie\_vectors%'
 ORDER BY 1`)
 	if err != nil {
 		return nil, fmt.Errorf("list dest tables: %w", err)

@@ -1,0 +1,365 @@
+openapi: 3.1.0
+info:
+  title: Bartie control API
+  version: 0.1.0
+  description: |
+    Bartie's control plane. Paths and operationIds follow Artie's public API and
+    MCP tool names (pipeline_list, pipeline_usage, ...) so an agent that knows
+    Artie MCP knows this one. Two tools have no Artie equivalent because Artie's
+    product cannot read the destination: pipeline_verify and destination_ask.
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /pipelines:
+    get:
+      operationId: pipeline_list
+      summary: List pipelines
+      description: |
+        Lightweight state for every pipeline (Bartie runs one, uuid "bartie"):
+        lifecycle status (running | paused | unknown), source and destination
+        type, and whether a backfill is in progress. Start here to resolve the
+        uuid; do not guess it. Status is lifecycle, not lag: use pipeline_usage
+        for lag.
+      responses:
+        "200":
+          description: Pipeline summaries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PipelineSummary"
+
+  /pipelines/{uuid}:
+    get:
+      operationId: pipeline_detail
+      summary: Get a pipeline
+      description: |
+        Full state for one pipeline: replicated tables, the Postgres replication
+        slot (active, confirmed LSN, lag bytes), the writer's Kafka consumer
+        group (committed vs end offset per partition), and which processes are
+        reachable and in what phase (reader: backfill | streaming; writer:
+        running | paused). Use for "what tables" and "is anything down".
+      parameters:
+        - $ref: "#/components/parameters/uuid"
+      responses:
+        "200":
+          description: Pipeline detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PipelineDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /pipelines/{uuid}/usage:
+    get:
+      operationId: pipeline_usage
+      summary: Pipeline usage and lag
+      description: |
+        Per-table rows processed and end-to-end latency (seconds) in a time
+        window, plus WHERE the latency is: readerLagBytes (source WAL ahead of
+        the reader), backlogMessages (published but not yet applied by the
+        writer), and mergeMs (destination MERGE timings). Default window is the
+        last hour UTC; always state the window you used. latency is null when
+        nothing moved; that is not zero lag.
+      parameters:
+        - $ref: "#/components/parameters/uuid"
+        - name: from
+          in: query
+          required: false
+          description: RFC3339 window start (default now minus 1h)
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          description: RFC3339 window end (default now)
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Usage
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Usage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /pipelines/{uuid}/error-logs:
+    get:
+      operationId: pipeline_error_logs
+      summary: Recent pipeline errors
+      description: |
+        Newest-first errors recorded by any pipeline process (reader, writer,
+        vecwriter, api), with service, table, message, and detail. A crash by
+        SIGKILL leaves no entry; a flush or init failure does. Empty items
+        means nothing recorded, not that nothing is wrong: cross-check
+        pipeline_detail.processes.
+      parameters:
+        - $ref: "#/components/parameters/uuid"
+      responses:
+        "200":
+          description: Error log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ErrorLog"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /pipelines/{uuid}/status:
+    post:
+      operationId: pipeline_update_status
+      summary: Pause or resume the writer
+      description: |
+        Pauses or resumes delivery to the destination. The reader keeps
+        streaming into the broker while paused, so backlogMessages grows; on
+        resume the writer drains it. This is a mutation: confirm with the user
+        before calling. Not a health read.
+      parameters:
+        - $ref: "#/components/parameters/uuid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [paused, running]
+      responses:
+        "200":
+          description: Applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  status: { type: string }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /pipelines/{uuid}/verify:
+    post:
+      operationId: pipeline_verify
+      summary: Verify destination matches source
+      description: |
+        Compares every replicated table on the source against the destination
+        by row count and a full-content checksum, and returns per-table results
+        plus an overall match. Bartie-only: Artie MCP cannot read the
+        destination. A live pipeline always has events in flight, so a
+        mismatch right after a write is normal; pass timeout (e.g. "10s") to
+        retry until match or deadline, which answers "did it converge".
+      parameters:
+        - $ref: "#/components/parameters/uuid"
+        - name: timeout
+          in: query
+          required: false
+          description: Retry until match or this duration passes (max 45s), e.g. 10s
+          schema: { type: string }
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyResult"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /ask:
+    post:
+      operationId: destination_ask
+      summary: Ask a question of the replicated data
+      description: |
+        Retrieval over the vector destination the pipeline maintains: embeds
+        the question, finds the closest rows, and answers from them. mode=live
+        reads the table the vecwriter keeps seconds behind the source;
+        mode=batch reads a snapshot refreshed on a timer, standing in for
+        nightly ETL. asOf says how fresh the data behind the answer is.
+        Bartie-only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [q]
+              properties:
+                q: { type: string, maxLength: 500 }
+                mode:
+                  type: string
+                  enum: [live, batch]
+                  default: live
+      responses:
+        "200":
+          description: Answer with sources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Answer"
+
+components:
+  parameters:
+    uuid:
+      name: uuid
+      in: path
+      required: true
+      description: Pipeline uuid from pipeline_list (Bartie runs one, "bartie")
+      schema: { type: string }
+
+  responses:
+    NotFound:
+      description: No pipeline with that uuid
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string }
+
+  schemas:
+    PipelineSummary:
+      type: object
+      properties:
+        uuid: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [running, paused, unknown] }
+        sourceType: { type: string }
+        destinationType: { type: string }
+        isDeploying: { type: boolean }
+        hasBackfillingTables: { type: boolean }
+        hasUndeployedChanges: { type: boolean }
+
+    PipelineDetail:
+      allOf:
+        - $ref: "#/components/schemas/PipelineSummary"
+        - type: object
+          properties:
+            tables:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  schema: { type: string }
+            slot:
+              type: object
+              properties:
+                name: { type: string }
+                active: { type: boolean }
+                confirmedFlushLsn: { type: string }
+                currentWalLsn: { type: string }
+                lagBytes: { type: integer }
+                error: { type: string }
+            consumer:
+              type: object
+              properties:
+                groupId: { type: string }
+                backlog: { type: integer }
+                partitions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      partition: { type: integer }
+                      committed: { type: integer }
+                      end: { type: integer }
+                      lag: { type: integer }
+                error: { type: string }
+            processes:
+              type: object
+              additionalProperties: { type: string }
+              description: service name -> phase, or "unreachable"
+
+    Usage:
+      type: object
+      properties:
+        tableStats:
+          type: array
+          description: Same shape as Artie's RouterPipelineTableStats
+          items:
+            type: object
+            properties:
+              tableName: { type: string }
+              count: { type: integer, description: rows processed in the window }
+              latency: { type: [number, "null"], description: mean seconds source commit to destination apply }
+        window:
+          type: object
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+        readerLagBytes: { type: [integer, "null"] }
+        slotActive: { type: [boolean, "null"] }
+        backlogMessages: { type: [integer, "null"] }
+        mergeMs:
+          type: [object, "null"]
+          properties:
+            samples: { type: integer }
+            last: { type: number }
+            p50: { type: number }
+            p95: { type: number }
+            max: { type: number }
+        lastAppliedAt: { type: [string, "null"], format: date-time }
+        lastCommitTs: { type: [string, "null"], format: date-time }
+        writerReachable: { type: boolean }
+
+    ErrorLog:
+      type: object
+      properties:
+        timestamp: { type: string, format: date-time }
+        service: { type: string }
+        table: { type: string }
+        message: { type: string }
+        errorDetail: { type: string }
+
+    VerifyResult:
+      type: object
+      properties:
+        match: { type: boolean }
+        checkedAt: { type: string, format: date-time }
+        tables:
+          type: array
+          items:
+            type: object
+            properties:
+              table: { type: string }
+              sourceRows: { type: integer }
+              destRows: { type: integer }
+              checksumMatch: { type: boolean }
+              detail: { type: string }
+
+    Answer:
+      type: object
+      properties:
+        question: { type: string }
+        mode: { type: string }
+        asOf: { type: [string, "null"], format: date-time }
+        staleBy: { type: [number, "null"], description: batch only, seconds since the snapshot }
+        answer: { type: string }
+        model: { type: string }
+        embedder: { type: string }
+        latencyMs: { type: integer }
+        answeredAt: { type: string, format: date-time }
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              table: { type: string }
+              pk: { type: object }
+              text: { type: string }
+              score: { type: number }
+              updatedAt: { type: string, format: date-time }

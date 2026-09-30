@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "bartie",
+  "owner": { "name": "Ben Barrera" },
+  "plugins": [
+    {
+      "name": "bartie",
+      "description": "Monitor a Bartie CDC pipeline, name its bottleneck, verify the destination matches the source, and ask questions of the replicated data.",
+      "author": { "name": "Ben Barrera" },
+      "source": "./mcp/plugins/bartie",
+      "category": "database"
+    }
+  ]
+}
