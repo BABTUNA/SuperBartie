@@ -1,5 +1,13 @@
 # Phase 6: Bartie Live
 
+**Status: built (6a, 6b, 6c).** Deviations from the plan below, all deliberate:
+
+- The default embedder is a deterministic feature-hashing bag of words (`MINICDC_EMBED_PROVIDER=hash`), so the stack runs with no keys; OpenAI and Voyage are the paid upgrades. Without an LLM key `/ask` returns the top record verbatim instead of a generated sentence.
+- `mergeMs` comes from the writer's own metrics port, scraped by the api, rather than a metrics table in the destination. Errors go to a shared JSONL file so they survive the process that hit them.
+- `pipeline_verify` grew a `timeout` query param (retry until match) because a single pass a moment after a write is expected to mismatch on a live pipeline.
+- The MCP exposes `destination_ask` as a seventh tool; `pipeline_update_status` shipped (pause/resume via the writer's control endpoint) and is the only mutation.
+- The page lives in me_me_me at `/bartie/live` and is embedded in the blog post through an MDX component.
+
 Goal: Bartie stops being a repo plus a video and becomes a URL. The pipeline runs on one VM, a page on babtuna.vercel.app drives it, and a second destination turns every row change into a vector so an AI answer reflects a source edit within seconds. Then the whole thing is operable from Claude Code through an MCP server built on Artie's own tool contract.
 
 Three sub-phases, in build order, each with its own cut line:
