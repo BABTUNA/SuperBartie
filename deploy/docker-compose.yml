@@ -97,12 +97,13 @@ services:
       MINICDC_WRITER_METRICS_URL: http://writer:9101
       MINICDC_VEC_METRICS_URL: http://vecwriter:9103
       MINICDC_ERROR_LOG: /var/lib/bartie/errors.jsonl
-      MINICDC_EMBED_PROVIDER: ${MINICDC_EMBED_PROVIDER:-none}
+      MINICDC_EMBED_PROVIDER: ${MINICDC_EMBED_PROVIDER:-hash}
       MINICDC_EMBED_MODEL: ${MINICDC_EMBED_MODEL:-text-embedding-3-small}
       MINICDC_EMBED_DIM: ${MINICDC_EMBED_DIM:-1536}
       MINICDC_EMBED_API_KEY: ${MINICDC_EMBED_API_KEY:-}
-      MINICDC_LLM_MODEL: ${MINICDC_LLM_MODEL:-claude-haiku-4-5-20251001}
+      MINICDC_LLM_MODEL: ${MINICDC_LLM_MODEL:-claude-opus-5-5}
       MINICDC_LLM_API_KEY: ${MINICDC_LLM_API_KEY:-}
+      MINICDC_SNAPSHOT_INTERVAL: ${MINICDC_SNAPSHOT_INTERVAL:-5m}
     volumes:
       - bartie_data:/var/lib/bartie
     depends_on:
@@ -122,6 +123,21 @@ services:
       dest: { condition: service_healthy }
       redpanda: { condition: service_healthy }
     restart: unless-stopped
+
+  vecwriter:
+    profiles: ["live"]
+    image: bartie:local
+    container_name: bartie-vecwriter
+    command: ["vecwriter"]
+    environment: *pipeline_env
+    volumes:
+      - bartie_data:/var/lib/bartie
+    depends_on:
+      dest: { condition: service_healthy }
+      redpanda: { condition: service_healthy }
+    # on-failure, not unless-stopped: with MINICDC_EMBED_PROVIDER=none it exits
+    # 0 on purpose and must stay down.
+    restart: on-failure
 
   api:
     profiles: ["live"]

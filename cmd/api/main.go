@@ -12,6 +12,8 @@ import (
 
 	"github.com/BABTUNA/bartie/internal/api"
 	"github.com/BABTUNA/bartie/internal/config"
+	"github.com/BABTUNA/bartie/internal/embed"
+	"github.com/BABTUNA/bartie/internal/llm"
 	"github.com/BABTUNA/bartie/internal/metrics"
 )
 
@@ -22,7 +24,25 @@ func main() {
 	cfg := config.Load()
 	metrics.Init("api", cfg.ErrorLogPath)
 
-	srv, err := api.New(ctx, cfg, nil)
+	// /ask is wired only when a vector destination exists. Same embedder
+	// config as the vecwriter, or the query vectors would not be comparable.
+	var asker api.Asker
+	emb, err := embed.New(cfg)
+	if err != nil {
+		metrics.RecordError("", "embedder init failed", err)
+		os.Exit(1)
+	}
+	if emb != nil {
+		rag, err := api.NewRAG(ctx, cfg.DestDSN, emb, llm.New(cfg), cfg.SnapshotInterval)
+		if err != nil {
+			metrics.RecordError("", "rag init failed", err)
+			os.Exit(1)
+		}
+		asker = rag
+		slog.Info("ask enabled", "embedder", emb.Name(), "llm", llm.New(cfg).Model(), "snapshotEvery", cfg.SnapshotInterval)
+	}
+
+	srv, err := api.New(ctx, cfg, asker)
 	if err != nil {
 		metrics.RecordError("", "api init failed", err)
 		os.Exit(1)

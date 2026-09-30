@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/segmentio/kafka-go"
 
+	"github.com/BABTUNA/bartie/internal/batch"
 	"github.com/BABTUNA/bartie/internal/config"
 	"github.com/BABTUNA/bartie/internal/events"
 	"github.com/BABTUNA/bartie/internal/metrics"
@@ -24,7 +25,7 @@ type Writer struct {
 	consumer *kafka.Reader
 	pool     *pgxpool.Pool
 	ddl      *ddlManager
-	buffer   *Buffer
+	buffer   *batch.Buffer
 }
 
 func New(ctx context.Context, cfg config.Config) (*Writer, error) {
@@ -48,7 +49,7 @@ func New(ctx context.Context, cfg config.Config) (*Writer, error) {
 		HeartbeatInterval: 3 * time.Second,
 	})
 
-	return &Writer{consumer: consumer, pool: pool, ddl: newDDLManager(), buffer: NewBuffer()}, nil
+	return &Writer{consumer: consumer, pool: pool, ddl: newDDLManager(), buffer: batch.NewBuffer()}, nil
 }
 
 func (w *Writer) Close() error {

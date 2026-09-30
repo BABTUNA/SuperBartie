@@ -1,4 +1,4 @@
-package writer
+package batch
 
 import (
 	"testing"
@@ -18,7 +18,7 @@ func evt(op events.Op, id int, after map[string]any, unchanged ...string) events
 }
 
 func TestDedupeLastEventWins(t *testing.T) {
-	out := dedupe([]events.ChangeEvent{
+	out := Dedupe([]events.ChangeEvent{
 		evt(events.OpCreate, 1, map[string]any{"id": 1, "name": "a", "notes": "x"}),
 		evt(events.OpUpdate, 1, map[string]any{"id": 1, "name": "b", "notes": "x"}),
 		evt(events.OpUpdate, 1, map[string]any{"id": 1, "name": "c", "notes": "x"}),
@@ -32,7 +32,7 @@ func TestDedupeLastEventWins(t *testing.T) {
 }
 
 func TestDedupeCreateThenDeleteCollapsesToDelete(t *testing.T) {
-	out := dedupe([]events.ChangeEvent{
+	out := Dedupe([]events.ChangeEvent{
 		evt(events.OpCreate, 1, map[string]any{"id": 1, "name": "a"}),
 		evt(events.OpDelete, 1, nil),
 	})
@@ -45,7 +45,7 @@ func TestDedupeCreateThenDeleteCollapsesToDelete(t *testing.T) {
 // last event has it "unchanged". Keeping only the last event would lose the
 // value, because the earlier event never reaches the destination.
 func TestDedupeFoldsUnchangedToastFromEarlierEvent(t *testing.T) {
-	out := dedupe([]events.ChangeEvent{
+	out := Dedupe([]events.ChangeEvent{
 		evt(events.OpUpdate, 1, map[string]any{"id": 1, "name": "a", "notes": "BIG TOASTED VALUE"}),
 		evt(events.OpUpdate, 1, map[string]any{"id": 1, "name": "b"}, "notes"),
 	})
@@ -66,7 +66,7 @@ func TestDedupeFoldsUnchangedToastFromEarlierEvent(t *testing.T) {
 // When nothing earlier in the batch knows the value, "unchanged" must survive
 // to the merge, which preserves the destination's copy.
 func TestDedupeKeepsUnchangedWhenValueUnknown(t *testing.T) {
-	out := dedupe([]events.ChangeEvent{
+	out := Dedupe([]events.ChangeEvent{
 		evt(events.OpUpdate, 1, map[string]any{"id": 1, "name": "b"}, "notes"),
 	})
 	if len(out[0].Unchanged) != 1 || out[0].Unchanged[0] != "notes" {
@@ -78,7 +78,7 @@ func TestDedupeKeepsUnchangedWhenValueUnknown(t *testing.T) {
 }
 
 func TestDedupeDistinctRowsAllSurvive(t *testing.T) {
-	out := dedupe([]events.ChangeEvent{
+	out := Dedupe([]events.ChangeEvent{
 		evt(events.OpCreate, 1, map[string]any{"id": 1, "name": "a"}),
 		evt(events.OpCreate, 2, map[string]any{"id": 2, "name": "b"}),
 		evt(events.OpDelete, 3, nil),

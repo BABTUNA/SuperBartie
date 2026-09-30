@@ -13,12 +13,6 @@ import (
 
 const stagingName = "_bartie_staging"
 
-// marshalCanonical exists for pkKey: encoding/json sorts map keys, so equal
-// PK maps always produce equal strings.
-func marshalCanonical(m map[string]any) ([]byte, error) {
-	return json.Marshal(m)
-}
-
 // createStaging makes a session-temp copy of the target's shape plus two
 // bookkeeping columns, dropped automatically when the transaction ends.
 func createStaging(ctx context.Context, tx pgx.Tx, rep events.ChangeEvent, cols []string) error {

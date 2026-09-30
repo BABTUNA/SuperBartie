@@ -1,6 +1,9 @@
 package config
 
-import "os"
+import (
+	"os"
+	"time"
+)
 
 // Config is shared by every binary; each uses the fields it needs. Everything
 // comes from env vars with defaults matching deploy/docker-compose.yml run on
@@ -31,12 +34,14 @@ type Config struct {
 	DemoRateLimit int    // requests per minute per IP on /demo and /ask
 
 	// Vector destination (cmd/vecwriter, api /ask).
-	EmbedProvider string // openai | voyage | none
+	EmbedProvider string // hash | openai | voyage | none
 	EmbedModel    string
 	EmbedDim      int
 	EmbedAPIKey   string
 	LLMModel      string
 	LLMAPIKey     string
+	// How often the api refreshes the "batch" snapshot of the vector table.
+	SnapshotInterval time.Duration
 }
 
 func Load() Config {
@@ -61,12 +66,14 @@ func Load() Config {
 		CORSOrigins:   getenv("MINICDC_CORS_ORIGINS", "http://localhost:3000"),
 		DemoRateLimit: getenvInt("MINICDC_DEMO_RATE_LIMIT", 30),
 
-		EmbedProvider: getenv("MINICDC_EMBED_PROVIDER", "none"),
+		EmbedProvider: getenv("MINICDC_EMBED_PROVIDER", "hash"),
 		EmbedModel:    getenv("MINICDC_EMBED_MODEL", "text-embedding-3-small"),
 		EmbedDim:      getenvInt("MINICDC_EMBED_DIM", 1536),
 		EmbedAPIKey:   getenv("MINICDC_EMBED_API_KEY", ""),
-		LLMModel:      getenv("MINICDC_LLM_MODEL", "claude-haiku-4-5-20251001"),
+		LLMModel:      getenv("MINICDC_LLM_MODEL", "claude-opus-5-5"),
 		LLMAPIKey:     getenv("MINICDC_LLM_API_KEY", ""),
+
+		SnapshotInterval: getenvDuration("MINICDC_SNAPSHOT_INTERVAL", 5*time.Minute),
 	}
 }
 
@@ -90,4 +97,16 @@ func getenvInt(key string, def int) int {
 		n = n*10 + int(c-'0')
 	}
 	return n
+}
+
+func getenvDuration(key string, def time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return def
+	}
+	return d
 }
