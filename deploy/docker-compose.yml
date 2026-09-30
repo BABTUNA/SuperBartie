@@ -179,6 +179,7 @@ services:
       TRAFFIC_INTERVAL: ${TRAFFIC_INTERVAL:-2}
     volumes:
       - ../scripts/demo-traffic.sh:/demo-traffic.sh:ro
+      - bartie_data:/var/lib/bartie   # the api's pause marker lives here
     depends_on:
       source: { condition: service_healthy }
     restart: on-failure

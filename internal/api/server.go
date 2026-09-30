@@ -91,6 +91,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /demo/poke", s.demo.limit(s.handlePoke))
 	mux.HandleFunc("GET /demo/row/{table}/{pk}", s.handleRow)
 	mux.HandleFunc("GET /demo/table/{table}", s.handleTable)
+	mux.HandleFunc("GET /demo/traffic", s.handleTrafficGet)
+	mux.HandleFunc("POST /demo/traffic", s.requireToken(s.handleTrafficSet))
 	mux.HandleFunc("POST /ask", s.demo.limit(s.handleAsk))
 
 	return s.cors(mux)

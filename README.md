@@ -147,7 +147,7 @@ Setup and stack control:
 | `./deploy/fetch-terra.sh` | one-time: clone the terra source fixture |
 | `./scripts/reset.sh` | destroy volumes and bring the stack back up freshly seeded (clean slate) |
 | `./scripts/load.sh [N]` | generate N iterations of mixed insert/update/delete traffic (the workload the demos use) |
-| `./scripts/demo-traffic.sh [seconds]` | readable ranger-log traffic for the live page, one write every ~2s (the compose `traffic` service runs this) |
+| `./scripts/demo-traffic.sh [seconds]` | readable ranger-log traffic for the live page, one write every ~2s (the compose `traffic` service runs this; `POST /demo/traffic {"enabled": false}` pauses it) |
 | `docker exec -it bartie-source psql -U postgres -d terra` | open a shell on the source database |
 | `docker exec -it bartie-dest psql -U postgres -d warehouse` | open a shell on the destination database |
 

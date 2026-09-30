@@ -3,9 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -383,4 +386,45 @@ func clientIP(r *http.Request) string {
 
 func quoteIdent(s string) string {
 	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+}
+
+// --- traffic switch --------------------------------------------------------
+
+// The demo traffic writer is a separate process (scripts/demo-traffic.sh)
+// that shares a data directory with the api. A marker file in that directory
+// pauses it; the script checks for the file before every write. No sockets,
+// no signals, survives restarts of either side.
+func (s *Server) trafficPauseFile() string {
+	return filepath.Join(filepath.Dir(s.cfg.ErrorLogPath), "traffic.paused")
+}
+
+func (s *Server) handleTrafficGet(w http.ResponseWriter, _ *http.Request) {
+	_, err := os.Stat(s.trafficPauseFile())
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": errors.Is(err, os.ErrNotExist)})
+}
+
+func (s *Server) handleTrafficSet(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Enabled == nil {
+		writeError(w, http.StatusBadRequest, `body must be {"enabled": true|false}`)
+		return
+	}
+	path := s.trafficPauseFile()
+	var err error
+	if *body.Enabled {
+		err = os.Remove(path)
+		if errors.Is(err, os.ErrNotExist) {
+			err = nil
+		}
+	} else {
+		_ = os.MkdirAll(filepath.Dir(path), 0o755)
+		err = os.WriteFile(path, []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o644)
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true, "enabled": *body.Enabled})
 }

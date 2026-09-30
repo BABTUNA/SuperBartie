@@ -17,10 +17,18 @@ INTERVAL="${TRAFFIC_INTERVAL:-2}"  # seconds between writes
 
 if [ -n "${PGHOST:-}" ]; then
   run_sql() { psql -q -v ON_ERROR_STOP=1 -U "${PGUSER:-postgres}" -d "${PGDATABASE:-terra}" "$@"; }
+  PAUSE_FILE="${TRAFFIC_PAUSE_FILE:-/var/lib/bartie/traffic.paused}"
 else
   cd "$(dirname "$0")/../deploy"
   run_sql() { docker compose exec -T source psql -q -v ON_ERROR_STOP=1 -U postgres -d terra "$@"; }
+  PAUSE_FILE="${TRAFFIC_PAUSE_FILE:-../data/traffic.paused}"
 fi
+
+# The api pauses us by creating this file (POST /demo/traffic {"enabled": false})
+# and resumes by removing it. Checked before every write.
+wait_if_paused() {
+  while [ -f "$PAUSE_FILE" ]; do sleep 1; done
+}
 
 places=("the north ridge" "the south bank" "the reed bed" "the shallows" "the acacia line" "the dry channel" "the salt lick" "the far shore")
 acts=("drinking" "resting" "grazing" "moving through" "wallowing" "watching the herd" "feeding calves" "sparring")
@@ -39,6 +47,7 @@ while :; do
     break
   fi
 
+  wait_if_paused
   place=${places[RANDOM % ${#places[@]}]}
   act=${acts[RANDOM % ${#acts[@]}]}
   size=${sizes[RANDOM % ${#sizes[@]}]}
