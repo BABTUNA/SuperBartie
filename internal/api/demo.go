@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,92 +17,110 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// The demo surface writes to a public database, so it is fenced three ways:
-// an allowlist of tables and columns, a reserved primary-key range that the
-// nightly reset wipes, and a per-IP rate limit. Never raw SQL from a client.
+// the demo surface writes to a public database so it is fenced hard
+// only the observations table can be written
+// only ids in the demo range or rows the traffic writer made
+// no free text, a visitor picks a place from a fixed list and the server writes the sentence
+// a per ip rate limit sits on top of all of it
 
 const (
+	// ids reserved for the page's own demo rows
+	// these can be created, updated and deleted
 	demoPKMin = 9000
 	demoPKMax = 9099
+
+	// the traffic writer's ids start here
+	// these can only be updated
+	trafficPKMin = 3_000_000_000
+
+	// where a demo row starts and what the reset button returns it to
+	defaultPlace = "the south bank"
+
+	demoObsTable = "public.observations"
+
+	// matches the last clause of a ranger log, like ", the reed bed."
+	placeSuffix = `,[^,]*\.\s*$`
 )
 
-type demoTable struct {
-	pk       string
-	cols     map[string]bool   // writable columns
-	required []string          // must be present on insert unless defaulted
-	defaults map[string]string // SQL expressions used on insert when absent
-}
-
-var demoTables = map[string]demoTable{
-	"public.animals": {
-		pk:       "animal_id",
-		cols:     set("name", "species", "status", "home_watering_hole_id"),
-		required: []string{"name"},
-		defaults: map[string]string{
-			"species":               "'lion'",
-			"status":                "'adult'",
-			"home_watering_hole_id": "(SELECT min(watering_hole_id) FROM watering_holes)",
-		},
-	},
-	"public.observations": {
-		pk:       "observation_id",
-		cols:     set("animal_id", "watering_hole_id", "observed_at", "notes"),
-		required: []string{"notes"},
-		defaults: map[string]string{
-			"animal_id":        "(SELECT min(animal_id) FROM animals)",
-			"watering_hole_id": "(SELECT min(watering_hole_id) FROM watering_holes)",
-			"observed_at":      "now()",
-		},
-	},
-}
-
-func set(keys ...string) map[string]bool {
-	m := map[string]bool{}
-	for _, k := range keys {
-		m[k] = true
-	}
-	return m
+// the only values a visitor can write
+// same list scripts/demo-traffic.sh picks from
+var demoPlaces = []string{
+	"the north ridge",
+	"the south bank",
+	"the reed bed",
+	"the shallows",
+	"the acacia line",
+	"the dry channel",
+	"the salt lick",
+	"the far shore",
 }
 
 type pokeRequest struct {
-	Op    string         `json:"op"`    // c | u | d
-	Table string         `json:"table"` // public.animals | public.observations
-	PK    map[string]any `json:"pk"`    // {"animal_id": 9001}
-	Set   map[string]any `json:"set"`   // columns to write (c, u)
+	// c create or reset a demo row, u update, d delete
+	Op string `json:"op"`
+
+	// optional, must be public.observations when present
+	Table string `json:"table"`
+
+	// which row, like {"observation_id": 9001}
+	PK map[string]any `json:"pk"`
+
+	// one of demoPlaces
+	// defaults to defaultPlace for c, required for u
+	Place string `json:"place"`
+
+	// free text is not accepted
+	// the field exists only so an old client gets a clear error
+	Set map[string]any `json:"set"`
 }
 
 type pokeResponse struct {
-	Op       string    `json:"op"`
-	Table    string    `json:"table"`
-	PK       int64     `json:"pk"`
-	CommitTs time.Time `json:"commitTs"` // source clock just before COMMIT
+	Op    string `json:"op"`
+	Table string `json:"table"`
+	PK    int64  `json:"pk"`
+	Place string `json:"place,omitempty"`
+
+	// source clock just before commit
+	// the page compares it to when the row lands in the destination
+	CommitTs time.Time `json:"commitTs"`
 }
 
+// handlePoke changes one observation on the source
+// the reader and writer then carry it to the destination like any other change
 func (s *Server) handlePoke(w http.ResponseWriter, r *http.Request) {
 	var req pokeRequest
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&req); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "bad json")
 		return
 	}
-	spec, ok := demoTables[req.Table]
-	if !ok {
-		writeError(w, http.StatusBadRequest, "table not in demo allowlist")
+	if req.Table != "" && req.Table != demoObsTable {
+		writeError(w, http.StatusBadRequest, "only public.observations can be changed from the demo")
 		return
 	}
-	pk, err := demoPK(req.PK, spec.pk)
+	if len(req.Set) > 0 {
+		writeError(w, http.StatusBadRequest, "free text is not accepted, send place instead")
+		return
+	}
+	id, err := pokeID(req.PK)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	for col := range req.Set {
-		if !spec.cols[col] {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("column %q not writable in demo", col))
-			return
-		}
-		if str, isStr := req.Set[col].(string); isStr && len(str) > 2000 {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("column %q too long", col))
-			return
-		}
+	scope := pokeScope(id)
+	if scope == "" {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("observation %d is read only, pick a demo row (%d-%d) or a sighting the traffic writer made", id, demoPKMin, demoPKMax))
+		return
+	}
+	if scope == "traffic" && req.Op != "u" {
+		writeError(w, http.StatusBadRequest, "traffic sightings can only be updated")
+		return
+	}
+	if req.Place == "" && req.Op == "c" {
+		req.Place = defaultPlace
+	}
+	if req.Op != "d" && !validPlace(req.Place) {
+		writeError(w, http.StatusBadRequest, "place must be one of: "+strings.Join(demoPlaces, ", "))
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
@@ -118,15 +135,11 @@ func (s *Server) handlePoke(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Op {
 	case "c":
-		err = demoInsert(ctx, tx, req.Table, spec, pk, req.Set)
+		err = pokeCreate(ctx, tx, id, req.Place)
 	case "u":
-		if len(req.Set) == 0 {
-			writeError(w, http.StatusBadRequest, "update needs at least one column in set")
-			return
-		}
-		err = demoUpdate(ctx, tx, req.Table, spec, pk, req.Set)
+		err = pokeMove(ctx, tx, id, req.Place)
 	case "d":
-		_, err = tx.Exec(ctx, fmt.Sprintf(`DELETE FROM %s WHERE %s = $1`, quoteTable(req.Table), quoteIdent(spec.pk)), pk)
+		_, err = tx.Exec(ctx, `DELETE FROM public.observations WHERE observation_id = $1`, id)
 	default:
 		writeError(w, http.StatusBadRequest, `op must be "c", "u", or "d"`)
 		return
@@ -145,91 +158,101 @@ func (s *Server) handlePoke(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, pokeResponse{Op: req.Op, Table: req.Table, PK: pk, CommitTs: commitTs.UTC()})
+	out := pokeResponse{Op: req.Op, Table: demoObsTable, PK: id, CommitTs: commitTs.UTC()}
+	if req.Op != "d" {
+		out.Place = req.Place
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
-func demoPK(pk map[string]any, col string) (int64, error) {
-	raw, ok := pk[col]
+// pokeID reads the observation id out of the pk object
+func pokeID(pk map[string]any) (int64, error) {
+	raw, ok := pk["observation_id"]
 	if !ok || len(pk) != 1 {
-		return 0, fmt.Errorf("pk must be {%q: <int>}", col)
+		return 0, fmt.Errorf(`pk must be {"observation_id": <int>}`)
 	}
-	var n int64
 	switch v := raw.(type) {
 	case float64:
-		n = int64(v)
+		if v != float64(int64(v)) {
+			return 0, fmt.Errorf("observation_id must be an integer")
+		}
+		return int64(v), nil
 	case json.Number:
-		var err error
-		if n, err = v.Int64(); err != nil {
-			return 0, fmt.Errorf("pk must be an integer")
+		n, err := v.Int64()
+		if err != nil {
+			return 0, fmt.Errorf("observation_id must be an integer")
 		}
+		return n, nil
 	case string:
-		var err error
-		if n, err = strconv.ParseInt(v, 10, 64); err != nil {
-			return 0, fmt.Errorf("pk must be an integer")
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("observation_id must be an integer")
 		}
+		return n, nil
 	default:
-		return 0, fmt.Errorf("pk must be an integer")
+		return 0, fmt.Errorf("observation_id must be an integer")
 	}
-	if n < demoPKMin || n > demoPKMax {
-		return 0, fmt.Errorf("demo pk must be between %d and %d", demoPKMin, demoPKMax)
-	}
-	return n, nil
 }
 
-func demoInsert(ctx context.Context, tx pgx.Tx, table string, spec demoTable, pk int64, vals map[string]any) error {
-	for _, req := range spec.required {
-		if _, ok := vals[req]; !ok {
-			return fmt.Errorf("insert needs %q", req)
+// pokeScope says what a visitor may do to this id
+// demo means full control, traffic means update only, empty means read only
+func pokeScope(id int64) string {
+	switch {
+	case id >= demoPKMin && id <= demoPKMax:
+		return "demo"
+	case id >= trafficPKMin:
+		return "traffic"
+	default:
+		return ""
+	}
+}
+
+func validPlace(p string) bool {
+	for _, ok := range demoPlaces {
+		if p == ok {
+			return true
 		}
 	}
-	cols := []string{quoteIdent(spec.pk)}
-	exprs := []string{"$1"}
-	args := []any{pk}
-	names := make([]string, 0, len(spec.cols))
-	for c := range spec.cols {
-		names = append(names, c)
-	}
-	sort.Strings(names)
-	for _, c := range names {
-		cols = append(cols, quoteIdent(c))
-		if v, ok := vals[c]; ok {
-			args = append(args, v)
-			exprs = append(exprs, fmt.Sprintf("$%d", len(args)))
-		} else if def, ok := spec.defaults[c]; ok {
-			exprs = append(exprs, def)
-		} else {
-			cols = cols[:len(cols)-1]
-		}
-	}
-	stmt := fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s)`, quoteTable(table), strings.Join(cols, ", "), strings.Join(exprs, ", "))
-	if _, err := tx.Exec(ctx, stmt, args...); err != nil {
-		return fmt.Errorf("insert: %w", err)
+	return false
+}
+
+// the sentence every demo row is written with
+// built in sql from the real animal and watering hole names so retrieval finds it
+const rangerLog = `format('Ranger log: %s the %s seen resting alone at %s, %s.', a.name, replace(a.species::text, '_', ' '), w.name, $2::text)`
+
+// pokeCreate writes a demo row in its default shape
+// if the row already exists it is put back to that shape, which is what reset needs
+func pokeCreate(ctx context.Context, tx pgx.Tx, id int64, place string) error {
+	_, err := tx.Exec(ctx, `
+INSERT INTO public.observations (observation_id, animal_id, watering_hole_id, observed_at, notes)
+SELECT $1, a.animal_id, w.watering_hole_id, now(), `+rangerLog+`
+FROM (SELECT animal_id, name, species FROM animals ORDER BY animal_id LIMIT 1) a,
+     (SELECT watering_hole_id, name FROM watering_holes ORDER BY watering_hole_id LIMIT 1) w
+ON CONFLICT (observation_id) DO UPDATE
+SET notes = EXCLUDED.notes, animal_id = EXCLUDED.animal_id, watering_hole_id = EXCLUDED.watering_hole_id`, id, place)
+	if err != nil {
+		return fmt.Errorf("create: %w", err)
 	}
 	return nil
 }
 
-func demoUpdate(ctx context.Context, tx pgx.Tx, table string, spec demoTable, pk int64, vals map[string]any) error {
-	names := make([]string, 0, len(vals))
-	for c := range vals {
-		names = append(names, c)
-	}
-	sort.Strings(names)
-	sets := make([]string, 0, len(names))
-	args := []any{pk}
-	for _, c := range names {
-		args = append(args, vals[c])
-		sets = append(sets, fmt.Sprintf("%s = $%d", quoteIdent(c), len(args)))
-	}
-	if table == "public.animals" {
-		sets = append(sets, "updated_at = now()")
-	}
-	stmt := fmt.Sprintf(`UPDATE %s SET %s WHERE %s = $1`, quoteTable(table), strings.Join(sets, ", "), quoteIdent(spec.pk))
-	tag, err := tx.Exec(ctx, stmt, args...)
+// pokeMove swaps the place at the end of a sighting's notes
+// a row whose notes are not a ranger log gets rewritten as one
+func pokeMove(ctx context.Context, tx pgx.Tx, id int64, place string) error {
+	tag, err := tx.Exec(ctx, `
+UPDATE public.observations o
+SET notes = CASE
+  WHEN o.notes ~ '`+placeSuffix+`' THEN regexp_replace(o.notes, '`+placeSuffix+`', ', ' || $2::text || '.')
+  ELSE (SELECT `+rangerLog+`
+        FROM animals a, watering_holes w
+        WHERE a.animal_id = o.animal_id AND w.watering_hole_id = o.watering_hole_id)
+END
+WHERE o.observation_id = $1`, id, place)
 	if err != nil {
 		return fmt.Errorf("update: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("no row with %s = %d (insert it first)", spec.pk, pk)
+		return fmt.Errorf("no observation %d on the source, it may have been retracted", id)
 	}
 	return nil
 }
@@ -328,8 +351,8 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 // says X, destination says X, applied at T".
 func (s *Server) handleRow(w http.ResponseWriter, r *http.Request) {
 	table := r.PathValue("table")
-	spec, ok := demoTables[table]
-	if !ok {
+	spec, ok := readTables[table]
+	if !ok || spec.destOnly {
 		writeError(w, http.StatusBadRequest, "table not in demo allowlist")
 		return
 	}

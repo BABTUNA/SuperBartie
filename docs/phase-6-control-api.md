@@ -37,7 +37,7 @@ cmd/api/main.go
     ├── GET  /pipelines/{uuid}/error-logs                 metrics.ReadErrors(errors.jsonl)
     ├── POST /pipelines/{uuid}/status                     forwards to writer:9101/control   (bearer token)
     ├── POST /pipelines/{uuid}/verify?timeout             verify.Compare, or verify.Converge to retry
-    ├── POST /demo/poke                                   one allowlisted row write on the SOURCE   internal/api/demo.go
+    ├── POST /demo/poke                                   move one sighting on the SOURCE, place from a fixed list   internal/api/demo.go
     ├── GET  /demo/row/{table}/{pk}                       the same row from both databases
     ├── GET  /demo/table/{table}                          a page of rows + counts from both databases
     └── GET|POST /demo/traffic                            pause marker for the traffic writer
@@ -69,11 +69,11 @@ Deltas in existing code: `writer.Run` skips fetching while paused and times each
 ### 2. Demo poke
 
 ```json
-{"op": "u", "table": "public.observations", "pk": {"observation_id": 9001}, "set": {"notes": "..."}}
--> {"op": "u", "table": "public.observations", "pk": 9001, "commitTs": "2026-09-30T04:25:10.006Z"}
+{"op": "u", "pk": {"observation_id": 9001}, "place": "the north ridge"}
+-> {"op": "u", "table": "public.observations", "pk": 9001, "place": "the north ridge", "commitTs": "2026-10-01T23:43:33.658Z"}
 ```
 
-Fenced three ways because it writes to a public database: table and column allowlist, pk range 9000..9099, per-IP rate limit.
+It writes to a public database, so a visitor never sends text. They pick a row and one of eight places, and the server rewrites the last clause of the sighting. Only `observations` can change, and only demo rows (9000..9099, full control) or sightings the traffic writer made (update only). `op: "c"` creates the demo row or puts it back to its default, which is what the page's reset button sends. A per-IP rate limit sits on top.
 
 ### 3. Verify
 

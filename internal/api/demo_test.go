@@ -8,23 +8,54 @@ import (
 	"time"
 )
 
-func TestDemoPKRange(t *testing.T) {
-	if _, err := demoPK(map[string]any{"animal_id": float64(9001)}, "animal_id"); err != nil {
-		t.Fatal(err)
+func TestPokeIDAndScope(t *testing.T) {
+	good := []map[string]any{
+		{"observation_id": float64(9001)},
+		{"observation_id": json.Number("9099")},
+		{"observation_id": "3000000123"},
 	}
-	if _, err := demoPK(map[string]any{"animal_id": json.Number("9099")}, "animal_id"); err != nil {
-		t.Fatal(err)
+	for _, pk := range good {
+		if _, err := pokeID(pk); err != nil {
+			t.Fatalf("rejected %v: %v", pk, err)
+		}
 	}
 	bad := []map[string]any{
-		{"animal_id": float64(1)},                     // real data, out of range
-		{"animal_id": float64(9100)},                  // just past the range
-		{"observation_id": float64(9001)},             // wrong pk column
-		{"animal_id": float64(9001), "x": float64(1)}, // extra keys
-		{"animal_id": "abc"},                          // not an int
+		{"animal_id": float64(9001)},
+		{"observation_id": float64(9001), "x": float64(1)},
+		{"observation_id": "abc"},
+		{"observation_id": 9001.5},
+		{},
 	}
 	for _, pk := range bad {
-		if _, err := demoPK(pk, "animal_id"); err == nil {
+		if _, err := pokeID(pk); err == nil {
 			t.Fatalf("accepted %v", pk)
+		}
+	}
+
+	scopes := map[int64]string{
+		1:             "",
+		8999:          "",
+		9000:          "demo",
+		9099:          "demo",
+		9100:          "",
+		2_999_999_999: "",
+		3_000_000_000: "traffic",
+		4_499_270_205: "traffic",
+	}
+	for id, want := range scopes {
+		if got := pokeScope(id); got != want {
+			t.Fatalf("scope(%d) = %q, want %q", id, got, want)
+		}
+	}
+}
+
+func TestOnlyListedPlacesAreWritable(t *testing.T) {
+	if !validPlace(defaultPlace) {
+		t.Fatal("the default place must be in the list")
+	}
+	for _, p := range []string{"", "the moon", "the north ridge; DROP TABLE observations", "The North Ridge"} {
+		if validPlace(p) {
+			t.Fatalf("accepted %q", p)
 		}
 	}
 }
