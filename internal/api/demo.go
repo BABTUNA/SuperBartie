@@ -234,17 +234,25 @@ func demoUpdate(ctx context.Context, tx pgx.Tx, table string, spec demoTable, pk
 	return nil
 }
 
-// readTables is the read-only allowlist for the table panel: every replicated
-// table, with the column that says "recently changed" on that table.
-var readTables = map[string]struct{ pk, recency string }{
-	"public.animals":        {pk: "animal_id", recency: "updated_at"},
-	"public.observations":   {pk: "observation_id", recency: "observed_at"},
-	"public.watering_holes": {pk: "watering_hole_id", recency: "created_at"},
+// readTables is the read-only allowlist for the table views: every replicated
+// table plus the vector destination, with the column that says "recently
+// changed" and, where the full row would be too big to ship, the columns to
+// select (the vector table's embedding is 1536 floats per row).
+var readTables = map[string]struct {
+	pk, recency, columns string
+	destOnly             bool
+}{
+	"public.animals":        {pk: "animal_id", recency: "updated_at", columns: "*"},
+	"public.observations":   {pk: "observation_id", recency: "observed_at", columns: "*"},
+	"public.watering_holes": {pk: "watering_hole_id", recency: "created_at", columns: "*"},
+	"public.bartie_vectors": {pk: "pk", recency: "__bartie_updated_at", destOnly: true,
+		columns: `"table", pk, text, __bartie_commit_ts, __bartie_updated_at`},
 }
 
-// handleTable returns the most recently changed rows of one table from both
-// databases, so a page can show traffic landing. Destination rows carry the
-// pipeline's metadata columns, which is how the page knows a row is fresh.
+// handleTable returns one table from both databases: a page of rows ordered
+// by recency (default) or by primary key, plus total counts per side. The
+// live page polls the recent view; the data browser pages through the whole
+// thing. Destination rows carry the pipeline's metadata columns.
 func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 	table := r.PathValue("table")
 	spec, ok := readTables[table]
@@ -252,24 +260,42 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "table not in demo allowlist")
 		return
 	}
-	limit := 10
+	limit, offset := 10, 0
 	if v := r.URL.Query().Get("limit"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 50 {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
 			limit = n
 		}
+	}
+	if v := r.URL.Query().Get("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	order := fmt.Sprintf("%s DESC, %s DESC", quoteIdent(spec.recency), quoteIdent(spec.pk))
+	if r.URL.Query().Get("order") == "pk" {
+		order = quoteIdent(spec.pk) + " ASC"
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	q := fmt.Sprintf(`SELECT row_to_json(t) FROM %s t ORDER BY %s DESC, %s DESC LIMIT $1`,
-		quoteTable(table), quoteIdent(spec.recency), quoteIdent(spec.pk))
-	read := func(pool interface {
+	q := fmt.Sprintf(`SELECT row_to_json(t) FROM (SELECT %s FROM %s ORDER BY %s LIMIT $1 OFFSET $2) t`,
+		spec.columns, quoteTable(table), order)
+	type pool interface {
 		Query(context.Context, string, ...any) (pgx.Rows, error)
-	}) []json.RawMessage {
+		QueryRow(context.Context, string, ...any) pgx.Row
+	}
+	read := func(p pool) ([]json.RawMessage, *int64) {
 		out := []json.RawMessage{}
-		rows, err := pool.Query(ctx, q, limit)
+		var count *int64
+		var n int64
+		if err := p.QueryRow(ctx, `SELECT count(*) FROM `+quoteTable(table)).Scan(&n); err == nil {
+			count = &n
+		} else {
+			return out, nil // table does not exist on this side
+		}
+		rows, err := p.Query(ctx, q, limit, offset)
 		if err != nil {
-			return out // table may not exist on the destination yet
+			return out, count
 		}
 		defer rows.Close()
 		for rows.Next() {
@@ -278,14 +304,23 @@ func (s *Server) handleTable(w http.ResponseWriter, r *http.Request) {
 				out = append(out, raw)
 			}
 		}
-		return out
+		return out, count
 	}
+	srcRows, srcCount := []json.RawMessage{}, (*int64)(nil)
+	if !spec.destOnly {
+		srcRows, srcCount = read(s.source)
+	}
+	dstRows, dstCount := read(s.dest)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"table":   table,
-		"pk":      spec.pk,
-		"recency": spec.recency,
-		"source":  read(s.source),
-		"dest":    read(s.dest),
+		"table":    table,
+		"pk":       spec.pk,
+		"recency":  spec.recency,
+		"destOnly": spec.destOnly,
+		"limit":    limit,
+		"offset":   offset,
+		"counts":   map[string]any{"source": srcCount, "dest": dstCount},
+		"source":   srcRows,
+		"dest":     dstRows,
 	})
 }
 
