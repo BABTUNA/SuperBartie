@@ -9,8 +9,8 @@ import (
 
 	"github.com/segmentio/kafka-go"
 
-	"github.com/BABTUNA/bartie/internal/metrics"
-	"github.com/BABTUNA/bartie/internal/verify"
+	"github.com/BABTUNA/superbartie/internal/metrics"
+	"github.com/BABTUNA/superbartie/internal/verify"
 )
 
 const writerGroup = "bartie-writer"

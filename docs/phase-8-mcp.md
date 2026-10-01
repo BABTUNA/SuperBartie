@@ -10,8 +10,8 @@ Done when (verified locally):
 cd mcp && uv run python -m unittest discover -s tests            # skills and contract agree, both directions
 BARTIE_API_URL=http://localhost:8088 uv run python tests/smoke_client.py   # 7 tools listed, 6 read-only ones called over stdio
 
-claude plugin marketplace add BABTUNA/Bartie
-claude plugin install bartie@bartie                              # then ask: "is my pipeline behind?"
+claude plugin marketplace add BABTUNA/SuperBartie
+claude plugin install super-bartie@super-bartie                              # then ask: "is my pipeline behind?"
 ```
 
 ## The idea
@@ -21,7 +21,7 @@ artie-mcp is not hand-written tools. Its `server.py` loads a policy contract and
 ## Layout
 
 ```text
-.claude-plugin/marketplace.json     repo root: `claude plugin marketplace add BABTUNA/Bartie`
+.claude-plugin/marketplace.json     repo root: `claude plugin marketplace add BABTUNA/SuperBartie`
 mcp/
 ├── openapi.yaml                    hand-written contract, 7 operations, operationId = tool name
 ├── server.py                       FastMCP.from_openapi(spec, httpx client -> $BARTIE_API_URL), stdio
@@ -29,10 +29,10 @@ mcp/
 ├── tests/
 │   ├── test_tools_match.py         skills <-> contract drift test (both directions)
 │   └── smoke_client.py             stdio client: list tools, call the six read-only ones against a live api
-└── plugins/bartie/
+└── plugins/super-bartie/
     ├── .claude-plugin/plugin.json
     ├── .mcp.json                   uv run --directory ${CLAUDE_PLUGIN_ROOT}/../.. python server.py
-    ├── agents/bartie.md
+    ├── agents/super-bartie.md
     └── skills/
         ├── monitoring/SKILL.md     which call answers which question + the bottleneck triage table
         └── verify/SKILL.md         when to pass timeout, how to read a mismatch
@@ -81,7 +81,7 @@ Trends need two calls a minute apart. The skill says so, and stops at diagnosis:
 | --- | --- |
 | `mcp/openapi.yaml` | new: the contract, 7 operations |
 | `mcp/server.py` | new: FastMCP server generated from the contract, stdio |
-| `mcp/plugins/bartie/` | new: plugin manifest, `.mcp.json`, agent prompt, `monitoring` and `verify` skills |
+| `mcp/plugins/super-bartie/` | new: plugin manifest, `.mcp.json`, agent prompt, `monitoring` and `verify` skills |
 | `mcp/tests/` | new: drift test and stdio smoke client |
 | `.claude-plugin/marketplace.json` | new, at the repo root |
 

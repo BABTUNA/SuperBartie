@@ -13,9 +13,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/BABTUNA/bartie/internal/embed"
-	"github.com/BABTUNA/bartie/internal/llm"
-	"github.com/BABTUNA/bartie/internal/vecwriter"
+	"github.com/BABTUNA/superbartie/internal/embed"
+	"github.com/BABTUNA/superbartie/internal/llm"
+	"github.com/BABTUNA/superbartie/internal/vecwriter"
 )
 
 // RAG answers questions from the vector destination. Two modes:

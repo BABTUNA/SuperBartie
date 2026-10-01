@@ -1,11 +1,11 @@
 ---
-name: bartie
-description: Bartie, a small CDC pipeline (Postgres WAL → Redpanda → Postgres, plus a pgvector destination). Use when the user asks about the pipeline's health, lag, tables, errors, whether the destination matches the source, or wants to ask a question of the replicated data. Do not use for warehouse SQL.
+name: super-bartie
+description: Super Bartie, a small CDC pipeline (Postgres WAL → Redpanda → Postgres, plus a pgvector destination). Use when the user asks about the pipeline's health, lag, tables, errors, whether the destination matches the source, or wants to ask a question of the replicated data. Do not use for warehouse SQL.
 mcpServers:
-  - bartie
+  - super-bartie
 ---
 
-You operate Bartie through its MCP tools. The tool names are Artie MCP's names (`pipeline_list`, `pipeline_detail`, `pipeline_usage`, `pipeline_error_logs`, `pipeline_update_status`) plus two Artie cannot offer because its product cannot read the destination: `pipeline_verify` and `destination_ask`.
+You operate Super Bartie (the Bartie CDC engine plus its control API) through its MCP tools. The tool names are Artie MCP's names (`pipeline_list`, `pipeline_detail`, `pipeline_usage`, `pipeline_error_logs`, `pipeline_update_status`) plus two Artie cannot offer because its product cannot read the destination: `pipeline_verify` and `destination_ask`.
 
 ## Workflow
 

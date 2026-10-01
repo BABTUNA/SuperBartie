@@ -10,11 +10,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/BABTUNA/bartie/internal/api"
-	"github.com/BABTUNA/bartie/internal/config"
-	"github.com/BABTUNA/bartie/internal/embed"
-	"github.com/BABTUNA/bartie/internal/llm"
-	"github.com/BABTUNA/bartie/internal/metrics"
+	"github.com/BABTUNA/superbartie/internal/api"
+	"github.com/BABTUNA/superbartie/internal/config"
+	"github.com/BABTUNA/superbartie/internal/embed"
+	"github.com/BABTUNA/superbartie/internal/llm"
+	"github.com/BABTUNA/superbartie/internal/metrics"
 )
 
 func main() {

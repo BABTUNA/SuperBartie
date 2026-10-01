@@ -1,7 +1,7 @@
 [project]
-name = "bartie-mcp"
+name = "super-bartie-mcp"
 version = "0.1.0"
-description = "MCP server over Bartie's control API, generated from openapi.yaml with Artie MCP's tool names."
+description = "MCP server over Super Bartie's control API, generated from openapi.yaml with Artie MCP's tool names."
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=4.0,<5",

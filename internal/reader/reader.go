@@ -10,10 +10,10 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgproto3"
 
-	"github.com/BABTUNA/bartie/internal/backfill"
-	"github.com/BABTUNA/bartie/internal/config"
-	"github.com/BABTUNA/bartie/internal/events"
-	"github.com/BABTUNA/bartie/internal/metrics"
+	"github.com/BABTUNA/superbartie/internal/backfill"
+	"github.com/BABTUNA/superbartie/internal/config"
+	"github.com/BABTUNA/superbartie/internal/events"
+	"github.com/BABTUNA/superbartie/internal/metrics"
 )
 
 const standbyInterval = 5 * time.Second

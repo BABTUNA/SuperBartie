@@ -7,9 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/BABTUNA/bartie/internal/config"
-	"github.com/BABTUNA/bartie/internal/metrics"
-	"github.com/BABTUNA/bartie/internal/writer"
+	"github.com/BABTUNA/superbartie/internal/config"
+	"github.com/BABTUNA/superbartie/internal/metrics"
+	"github.com/BABTUNA/superbartie/internal/writer"
 )
 
 func main() {

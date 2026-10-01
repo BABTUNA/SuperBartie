@@ -1,6 +1,6 @@
 # One image, four entrypoints (reader, writer, vecwriter, api). Compose picks
 # the binary per service with `command:`. Built from the repo root:
-#   docker build -f deploy/Dockerfile -t bartie:local .
+#   docker build -f deploy/Dockerfile -t superbartie:local .
 FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./

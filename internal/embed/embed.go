@@ -19,7 +19,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/BABTUNA/bartie/internal/config"
+	"github.com/BABTUNA/superbartie/internal/config"
 )
 
 type Embedder interface {

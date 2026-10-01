@@ -20,8 +20,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/BABTUNA/bartie/internal/config"
-	"github.com/BABTUNA/bartie/internal/metrics"
+	"github.com/BABTUNA/superbartie/internal/config"
+	"github.com/BABTUNA/superbartie/internal/metrics"
 )
 
 // PipelineUUID is the one pipeline this deployment runs. Artie addresses

@@ -1,4 +1,4 @@
-module github.com/BABTUNA/bartie
+module github.com/BABTUNA/superbartie
 
 go 1.27.0
 

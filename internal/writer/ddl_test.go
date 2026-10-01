@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/BABTUNA/bartie/internal/events"
+	"github.com/BABTUNA/superbartie/internal/events"
 )
 
 func TestOrderedColumnsIsStable(t *testing.T) {

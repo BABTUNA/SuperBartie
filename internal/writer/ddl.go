@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/BABTUNA/bartie/internal/events"
+	"github.com/BABTUNA/superbartie/internal/events"
 )
 
 // Metadata columns every destination table carries, mirroring how Artie

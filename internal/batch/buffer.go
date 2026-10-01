@@ -5,7 +5,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 
-	"github.com/BABTUNA/bartie/internal/events"
+	"github.com/BABTUNA/superbartie/internal/events"
 )
 
 // Buffer accumulates events between flushes, grouped by table, and remembers

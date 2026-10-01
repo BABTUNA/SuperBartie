@@ -14,8 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/BABTUNA/bartie/internal/events"
-	"github.com/BABTUNA/bartie/internal/pgval"
+	"github.com/BABTUNA/superbartie/internal/events"
+	"github.com/BABTUNA/superbartie/internal/pgval"
 )
 
 const chunkSize = 500

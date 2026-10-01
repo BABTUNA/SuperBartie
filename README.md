@@ -1,6 +1,6 @@
-# Bartie
+# Super Bartie
 
-A small change data capture engine: it watches a Postgres database's write-ahead log and keeps a live copy of its tables in a second database, without losing or duplicating a change. One source, one destination, built from first principles as a study of how systems like [Artie](https://artie.com) work.
+[Bartie](https://github.com/BABTUNA/Bartie) is a small change data capture engine: it reads a Postgres write-ahead log and keeps a live copy of the tables in a second database, without losing or duplicating a change. Super Bartie is that same engine, unchanged, running as a service: a control API that says where the lag is, a second destination that turns every change into a vector for retrieval, an MCP server so an agent can operate it, and a deployment you can open in a browser.
 
 ```text
 source Postgres ──WAL──▶ reader ──▶ Redpanda ──┬──▶ writer ────▶ destination Postgres (tables)
@@ -9,19 +9,19 @@ source Postgres ──WAL──▶ reader ──▶ Redpanda ──┬──▶ 
                                      api: usage, error logs, verify, /ask, demo pokes
 ```
 
-The source fixture is Artie's own [terra](https://github.com/artie-labs/terra) demo dataset, run unmodified.
+Built as a study of how systems like [Artie](https://artie.com) work. The source fixture is Artie's own [terra](https://github.com/artie-labs/terra) demo dataset, run unmodified. The reader, writer, backfill, and verify are Bartie's and are documented in that repo's writeup; everything in the "Control api, vector destination, MCP" section below is what this repo adds.
 
 ### ▶ Live
 
-The pipeline runs on a small VM with a page in front of it: [babtuna.vercel.app/bartie/live](https://babtuna.vercel.app/bartie/live). Change a row on the source and watch it land, ask the same question of a vector copy that is seconds behind the source and of a five-minute snapshot, and run a full-table checksum. Everything on the page is a plain call to the control api below.
+The pipeline runs on a small VM with a page in front of it: [babtuna.vercel.app/super-bartie/live](https://babtuna.vercel.app/super-bartie/live). Watch rows land on both sides, change a row on the source, ask the same question of a vector copy that is seconds behind the source and of a five-minute snapshot, and run a full-table checksum. [babtuna.vercel.app/super-bartie/data](https://babtuna.vercel.app/super-bartie/data) browses both databases side by side. Everything on those pages is a plain call to the control api below.
 
-### ▶ Demo video
+### ▶ Demo video (the engine)
 
-A walkthrough of the architecture, a live run, and the code.
+A walkthrough of Bartie itself: the architecture, a live run, and the code.
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=_2bagFk1CLk">
-    <img src="https://img.youtube.com/vi/_2bagFk1CLk/maxresdefault.jpg" width="640" alt="Watch the Bartie demo">
+    <img src="https://img.youtube.com/vi/_2bagFk1CLk/maxresdefault.jpg" width="640" alt="Watch the Bartie engine demo">
   </a>
 </p>
 
@@ -46,13 +46,13 @@ go build ./...                                      # build the binaries into bi
 Insert a row on the source:
 
 ```bash
-docker exec bartie-source psql -U postgres -d terra -c "INSERT INTO animals (animal_id, name, species, home_watering_hole_id, status) VALUES (9999, 'Testo', 'lion', 1, 'adult');"
+docker exec superbartie-source psql -U postgres -d terra -c "INSERT INTO animals (animal_id, name, species, home_watering_hole_id, status) VALUES (9999, 'Testo', 'lion', 1, 'adult');"
 ```
 
 See it arrive in the destination a second later:
 
 ```bash
-docker exec bartie-dest psql -U postgres -d warehouse -c "SELECT animal_id, name, __bartie_commit_ts, __bartie_updated_at FROM public.animals WHERE animal_id = 9999;"
+docker exec superbartie-dest psql -U postgres -d warehouse -c "SELECT animal_id, name, __bartie_commit_ts, __bartie_updated_at FROM public.animals WHERE animal_id = 9999;"
 ```
 
 ## Demo
@@ -105,8 +105,8 @@ Three additions sit next to the pipeline without changing the reader or writer. 
 - **`mcp/`** is an MCP server generated from `mcp/openapi.yaml` the way [artie-mcp](https://github.com/artie-labs/artie-mcp) generates its tools from Artie's spec. The operationIds are Artie MCP's tool names (`pipeline_list`, `pipeline_usage`, ...) plus `pipeline_verify` and `destination_ask`. It ships as a Claude Code plugin with a monitoring skill whose triage table turns the three lag numbers into a named bottleneck, and a test that fails when a skill names a tool the contract lacks or the contract gains a tool no skill documents.
 
 ```bash
-claude plugin marketplace add BABTUNA/Bartie
-claude plugin install bartie@bartie      # then: "is my pipeline behind?"
+claude plugin marketplace add BABTUNA/SuperBartie
+claude plugin install super-bartie@super-bartie      # then: "is my pipeline behind?"
 ```
 
 Run the whole thing in containers, including Caddy in front of the api:
@@ -148,8 +148,8 @@ Setup and stack control:
 | `./scripts/reset.sh` | destroy volumes and bring the stack back up freshly seeded (clean slate) |
 | `./scripts/load.sh [N]` | generate N iterations of mixed insert/update/delete traffic (the workload the demos use) |
 | `./scripts/demo-traffic.sh [seconds]` | readable ranger-log traffic for the live page, one write every ~2s (the compose `traffic` service runs this; `POST /demo/traffic {"enabled": false}` pauses it) |
-| `docker exec -it bartie-source psql -U postgres -d terra` | open a shell on the source database |
-| `docker exec -it bartie-dest psql -U postgres -d warehouse` | open a shell on the destination database |
+| `docker exec -it superbartie-source psql -U postgres -d terra` | open a shell on the source database |
+| `docker exec -it superbartie-dest psql -U postgres -d warehouse` | open a shell on the destination database |
 
 The scripts are three complete demos; the binaries are the system they drive (run them by hand only for the manual walkthrough above); `cdcctl` inspects results; `reset.sh` gets you back to zero.
 

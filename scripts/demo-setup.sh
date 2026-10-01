@@ -10,8 +10,8 @@ bold() { printf '\n\033[1m== %s\033[0m\n' "$1"; }        # step heading
 why()  { printf '   \033[2m%s\033[0m\n' "$1"; }          # one-line explanation
 run()  { printf '   $ %s\n' "$*"; "$@"; }                # show the command, then run it
 
-SRC="docker exec bartie-source psql -U postgres -d terra -tAc"
-DST="docker exec bartie-dest psql -U postgres -d warehouse -tAc"
+SRC="docker exec superbartie-source psql -U postgres -d terra -tAc"
+DST="docker exec superbartie-dest psql -U postgres -d warehouse -tAc"
 
 bold "1/5  Stop any leftover pipeline processes"
 why "old readers hold the replication slot and block a fresh start"

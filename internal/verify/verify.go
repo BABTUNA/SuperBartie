@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/BABTUNA/bartie/internal/config"
+	"github.com/BABTUNA/superbartie/internal/config"
 )
 
 // TableResult is one table's source-vs-destination comparison.

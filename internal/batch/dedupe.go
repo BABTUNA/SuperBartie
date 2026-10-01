@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/BABTUNA/bartie/internal/events"
+	"github.com/BABTUNA/superbartie/internal/events"
 )
 
 // Dedupe collapses a batch to one event per PK: destinations care about final

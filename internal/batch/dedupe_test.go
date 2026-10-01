@@ -3,7 +3,7 @@ package batch
 import (
 	"testing"
 
-	"github.com/BABTUNA/bartie/internal/events"
+	"github.com/BABTUNA/superbartie/internal/events"
 )
 
 func evt(op events.Op, id int, after map[string]any, unchanged ...string) events.ChangeEvent {

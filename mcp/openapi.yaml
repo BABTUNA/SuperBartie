@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Bartie control API
+  title: Super Bartie control API
   version: 0.1.0
   description: |
     Bartie's control plane. Paths and operationIds follow Artie's public API and

@@ -19,11 +19,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/segmentio/kafka-go"
 
-	"github.com/BABTUNA/bartie/internal/batch"
-	"github.com/BABTUNA/bartie/internal/config"
-	"github.com/BABTUNA/bartie/internal/embed"
-	"github.com/BABTUNA/bartie/internal/events"
-	"github.com/BABTUNA/bartie/internal/metrics"
+	"github.com/BABTUNA/superbartie/internal/batch"
+	"github.com/BABTUNA/superbartie/internal/config"
+	"github.com/BABTUNA/superbartie/internal/embed"
+	"github.com/BABTUNA/superbartie/internal/events"
+	"github.com/BABTUNA/superbartie/internal/metrics"
 )
 
 const (

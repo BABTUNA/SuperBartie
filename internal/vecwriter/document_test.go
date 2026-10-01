@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/BABTUNA/bartie/internal/events"
+	"github.com/BABTUNA/superbartie/internal/events"
 )
 
 func TestSkipUnchangedOnlyWhenEmbeddedColumnMissing(t *testing.T) {

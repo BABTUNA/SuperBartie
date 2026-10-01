@@ -7,10 +7,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/BABTUNA/bartie/internal/config"
-	"github.com/BABTUNA/bartie/internal/embed"
-	"github.com/BABTUNA/bartie/internal/metrics"
-	"github.com/BABTUNA/bartie/internal/vecwriter"
+	"github.com/BABTUNA/superbartie/internal/config"
+	"github.com/BABTUNA/superbartie/internal/embed"
+	"github.com/BABTUNA/superbartie/internal/metrics"
+	"github.com/BABTUNA/superbartie/internal/vecwriter"
 )
 
 func main() {

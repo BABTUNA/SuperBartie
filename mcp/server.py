@@ -1,4 +1,4 @@
-"""Bartie MCP: tools generated from openapi.yaml, the way artie-mcp generates
+"""Super Bartie MCP: tools generated from openapi.yaml, the way artie-mcp generates
 its tools from Artie's OpenAPI spec plus a policy pin. No hand-written tool
 functions; the contract is the spec. Tool names are the operationIds, which
 are Artie MCP's names wherever an equivalent exists.
@@ -50,7 +50,7 @@ client = httpx.AsyncClient(base_url=API_URL, headers=headers, timeout=60.0)
 mcp = FastMCP.from_openapi(
     openapi_spec=spec,
     client=client,
-    name="Bartie",
+    name="Super Bartie",
     mcp_names={name: name for name in _tools.values()},
     route_map_fn=_route_map,
 )

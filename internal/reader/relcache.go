@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pglogrepl"
 
-	"github.com/BABTUNA/bartie/internal/pgval"
+	"github.com/BABTUNA/superbartie/internal/pgval"
 )
 
 // Relation is our cached view of a table's schema, built from pgoutput

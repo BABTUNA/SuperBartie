@@ -1,5 +1,5 @@
 {
-  "name": "bartie",
+  "name": "super-bartie",
   "description": "Monitor a Bartie CDC pipeline, name its bottleneck, verify the destination matches the source, and ask questions of the replicated data.",
   "author": {
     "name": "Ben Barrera"

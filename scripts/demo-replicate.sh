@@ -13,8 +13,8 @@ run()  { printf '   $ %s\n' "$*"; "$@"; }
 # Unique id per run so repeated demos never collide on the primary key.
 ID=$(( 900000 + ($(date +%s) % 90000) ))
 
-SRC_EXEC() { docker exec bartie-source psql -U postgres -d terra "$@"; }
-DST_EXEC() { docker exec bartie-dest   psql -U postgres -d warehouse "$@"; }
+SRC_EXEC() { docker exec superbartie-source psql -U postgres -d terra "$@"; }
+DST_EXEC() { docker exec superbartie-dest   psql -U postgres -d warehouse "$@"; }
 
 show_source() {
   printf '\n   \033[36mSOURCE  animals (id %s)\033[0m\n' "$ID"
@@ -70,8 +70,8 @@ B=$(( 1000000 + ($(date +%s) % 500000) ))
 
 counts() {
   local s d
-  s=$(docker exec bartie-source psql -U postgres -d terra -tAc "SELECT count(*) FROM animals" 2>/dev/null || echo '?')
-  d=$(docker exec bartie-dest psql -U postgres -d warehouse -tAc "SELECT count(*) FROM animals" 2>/dev/null || echo '?')
+  s=$(docker exec superbartie-source psql -U postgres -d terra -tAc "SELECT count(*) FROM animals" 2>/dev/null || echo '?')
+  d=$(docker exec superbartie-dest psql -U postgres -d warehouse -tAc "SELECT count(*) FROM animals" 2>/dev/null || echo '?')
   printf '   \033[1msource %s animals   →   destination %s animals\033[0m\n' "$s" "$d"
 }
 

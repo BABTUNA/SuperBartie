@@ -12,10 +12,14 @@
 #
 # Run ./fetch-terra.sh once first: it clones artie-labs/terra, whose init SQL
 # (schema + seed + publication) is mounted into the source container.
+# Its own compose project, so it never shares containers or volumes with the
+# original Bartie repo (whose compose file also lives in a deploy/ directory).
+name: superbartie
+
 services:
   source:
     image: postgres:16
-    container_name: bartie-source
+    container_name: superbartie-source
     environment:
       POSTGRES_PASSWORD: bartie
       POSTGRES_DB: terra
@@ -40,7 +44,7 @@ services:
 
   redpanda:
     image: redpandadata/redpanda:v24.2.4
-    container_name: bartie-redpanda
+    container_name: superbartie-redpanda
     command:
       - redpanda
       - start
@@ -64,7 +68,7 @@ services:
     # replica tables are unaffected and the vector destination needs no
     # separate database.
     image: pgvector/pgvector:pg16
-    container_name: bartie-dest
+    container_name: superbartie-dest
     environment:
       POSTGRES_PASSWORD: bartie
       POSTGRES_DB: warehouse
@@ -83,8 +87,8 @@ services:
   reader:
     profiles: ["live"]
     build: { context: .., dockerfile: deploy/Dockerfile }
-    image: bartie:local
-    container_name: bartie-reader
+    image: superbartie:local
+    container_name: superbartie-reader
     command: ["reader"]
     environment: &pipeline_env
       MINICDC_SOURCE_DSN: postgres://postgres:bartie@source:5432/terra
@@ -113,8 +117,8 @@ services:
 
   writer:
     profiles: ["live"]
-    image: bartie:local
-    container_name: bartie-writer
+    image: superbartie:local
+    container_name: superbartie-writer
     command: ["writer"]
     environment: *pipeline_env
     volumes:
@@ -126,8 +130,8 @@ services:
 
   vecwriter:
     profiles: ["live"]
-    image: bartie:local
-    container_name: bartie-vecwriter
+    image: superbartie:local
+    container_name: superbartie-vecwriter
     command: ["vecwriter"]
     environment: *pipeline_env
     volumes:
@@ -141,8 +145,8 @@ services:
 
   api:
     profiles: ["live"]
-    image: bartie:local
-    container_name: bartie-api
+    image: superbartie:local
+    container_name: superbartie-api
     command: ["api"]
     environment:
       <<: *pipeline_env
@@ -169,7 +173,7 @@ services:
   traffic:
     profiles: ["live"]
     image: postgres:16
-    container_name: bartie-traffic
+    container_name: superbartie-traffic
     entrypoint: ["bash", "-c", "[ \"$$TRAFFIC_INTERVAL\" = 0 ] && exit 0; exec /demo-traffic.sh"]
     environment:
       PGHOST: source
@@ -187,7 +191,7 @@ services:
   caddy:
     profiles: ["live"]
     image: caddy:2-alpine
-    container_name: bartie-caddy
+    container_name: superbartie-caddy
     environment:
       # A real domain gets automatic Let's Encrypt TLS. The default is plain
       # HTTP on 8088 for running the live profile on a laptop.

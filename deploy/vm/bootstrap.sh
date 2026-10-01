@@ -3,14 +3,14 @@
 # Docker, clone Bartie, fetch terra, start the live profile, install the
 # nightly reset. Run as root:
 #
-#   curl -fsSL https://raw.githubusercontent.com/BABTUNA/Bartie/main/deploy/vm/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/BABTUNA/SuperBartie/main/deploy/vm/bootstrap.sh | bash
 #
-# Then edit /opt/bartie/deploy/.env (API_DOMAIN at minimum) and run
-# /opt/bartie/deploy/vm/redeploy.sh.
+# Then edit /opt/superbartie/deploy/.env (API_DOMAIN at minimum) and run
+# /opt/superbartie/deploy/vm/redeploy.sh.
 set -euo pipefail
 
-REPO="${BARTIE_REPO:-https://github.com/BABTUNA/Bartie.git}"
-DIR=/opt/bartie
+REPO="${BARTIE_REPO:-https://github.com/BABTUNA/SuperBartie.git}"
+DIR=/opt/superbartie
 
 echo "== docker"
 if ! command -v docker >/dev/null; then
@@ -39,10 +39,10 @@ if [ ! -f deploy/.env ]; then
 fi
 
 echo "== nightly reset at 03:00 UTC"
-cat > /etc/cron.d/bartie-nightly <<EOF
-0 3 * * * root $DIR/deploy/vm/nightly-reset.sh >> /var/log/bartie-nightly.log 2>&1
+cat > /etc/cron.d/superbartie-nightly <<EOF
+0 3 * * * root $DIR/deploy/vm/nightly-reset.sh >> /var/log/superbartie-nightly.log 2>&1
 EOF
-chmod 644 /etc/cron.d/bartie-nightly
+chmod 644 /etc/cron.d/superbartie-nightly
 
 echo "== up"
 ./deploy/vm/redeploy.sh

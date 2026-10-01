@@ -23,7 +23,7 @@ pkill -9 -f 'bin/reader' 2>/dev/null || true
 pkill -9 -f 'bin/writer' 2>/dev/null || true
 go build -o bin/reader ./cmd/reader && go build -o bin/writer ./cmd/writer && go build -o bin/cdcctl ./cmd/cdcctl
 ./scripts/reset.sh >/dev/null
-docker exec bartie-source psql -U postgres -d terra -qc "TRUNCATE observations, animals, watering_holes;"
+docker exec superbartie-source psql -U postgres -d terra -qc "TRUNCATE observations, animals, watering_holes;"
 ./bin/reader >/tmp/bartie-reader.log 2>&1 &
 ./bin/writer >/tmp/bartie-writer.log 2>&1 &
 sleep 3
@@ -36,25 +36,25 @@ printf '   measured: %s\n' "$CDC_LINE"
 
 bold "Part B  Batch snapshot copy time (separate, non-replicated database)"
 why "each cycle re-copies the whole table source->destination; that time is the freshness floor"
-docker exec bartie-source createdb -U postgres benchbatch 2>/dev/null || true
-docker exec bartie-dest   createdb -U postgres benchbatch 2>/dev/null || true
-docker exec bartie-source psql -U postgres -d benchbatch -qc "CREATE TABLE IF NOT EXISTS t (id bigint PRIMARY KEY, payload text);"
-docker exec bartie-dest   psql -U postgres -d benchbatch -qc "CREATE TABLE IF NOT EXISTS t (id bigint PRIMARY KEY, payload text);"
+docker exec superbartie-source createdb -U postgres benchbatch 2>/dev/null || true
+docker exec superbartie-dest   createdb -U postgres benchbatch 2>/dev/null || true
+docker exec superbartie-source psql -U postgres -d benchbatch -qc "CREATE TABLE IF NOT EXISTS t (id bigint PRIMARY KEY, payload text);"
+docker exec superbartie-dest   psql -U postgres -d benchbatch -qc "CREATE TABLE IF NOT EXISTS t (id bigint PRIMARY KEY, payload text);"
 
 declare -a RESULT_SIZE RESULT_BATCH
 for N in $SIZES; do
   why "loading $N rows on the source"
-  docker exec bartie-source psql -U postgres -d benchbatch -qc \
+  docker exec superbartie-source psql -U postgres -d benchbatch -qc \
     "TRUNCATE t; INSERT INTO t SELECT g, repeat('x', $PAYLOAD) FROM generate_series(1, $N) g;"
 
   cycles=3
   [ "$N" -ge 1000000 ] && cycles=1   # large sizes are slow; one full cycle is enough
   total=0
   for c in $(seq 1 $cycles); do
-    docker exec bartie-dest psql -U postgres -d benchbatch -qc "TRUNCATE t;"
+    docker exec superbartie-dest psql -U postgres -d benchbatch -qc "TRUNCATE t;"
     t0=$(now)
-    docker exec bartie-source pg_dump -U postgres -d benchbatch -t t --data-only \
-      | docker exec -i bartie-dest psql -U postgres -d benchbatch -q >/dev/null
+    docker exec superbartie-source pg_dump -U postgres -d benchbatch -t t --data-only \
+      | docker exec -i superbartie-dest psql -U postgres -d benchbatch -q >/dev/null
     t1=$(now)
     total=$(python3 -c "print($total + ($t1 - $t0))")
   done

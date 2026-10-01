@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/BABTUNA/bartie/internal/bench"
-	"github.com/BABTUNA/bartie/internal/config"
-	"github.com/BABTUNA/bartie/internal/verify"
+	"github.com/BABTUNA/superbartie/internal/bench"
+	"github.com/BABTUNA/superbartie/internal/config"
+	"github.com/BABTUNA/superbartie/internal/verify"
 )
 
 func main() {

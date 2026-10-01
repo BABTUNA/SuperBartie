@@ -27,7 +27,7 @@ curl -s 'localhost:8088/demo/table/public.observations?limit=5'               # 
                     │         │                                                  │
                     └──── Caddy (TLS, :8088 locally) ──────────────────────────────┘
                               │
-   site: /bartie/live, /bartie/data, blog embed          Claude Code ──stdio──▶ mcp/server.py ──▶ api
+   site: /super-bartie/live, /super-bartie/data, blog embed          Claude Code ──stdio──▶ mcp/server.py ──▶ api
 ```
 
 Nine compose services: `source`, `redpanda`, `dest` always; `reader`, `writer`, `vecwriter`, `api`, `traffic`, `caddy` under the `live` profile. One image (`deploy/Dockerfile`) holds all four Go binaries; each service picks its binary with `command:`. A shared volume `bartie_data` (mounted at `/var/lib/bartie`) carries `errors.jsonl` and the traffic pause marker between containers.
@@ -190,13 +190,13 @@ internal/config/config.go   metrics addrs/URLs, error log path, api addr/token/C
 ```text
 deploy/
 ├── docker-compose.yml        3 data services always; reader, writer, vecwriter, api, traffic, caddy under profile "live"
-├── Dockerfile                multi-stage: go build ./cmd/... -> alpine, one image (bartie:local), built by the reader service
+├── Dockerfile                multi-stage: go build ./cmd/... -> alpine, one image (superbartie:local), built by the reader service
 ├── Caddyfile                 {$API_DOMAIN} -> api:8080; default http://localhost:8088 for laptops, a real domain gets TLS
 ├── .env.example              API_DOMAIN, CORS origins, token, rate limit, embed/llm keys, snapshot + traffic intervals
 └── vm/
     ├── bootstrap.sh          fresh Ubuntu: docker, ufw (ssh/80/443), clone, fetch-terra, cron, up
     ├── redeploy.sh           git pull, up -d --build; volumes kept, so the slot survives and the reader resumes
-    └── nightly-reset.sh      down -v, up -d, wait for /health; 03:00 UTC from /etc/cron.d/bartie-nightly
+    └── nightly-reset.sh      down -v, up -d, wait for /health; 03:00 UTC from /etc/cron.d/superbartie-nightly
 
 scripts/demo-traffic.sh       readable writes for the page; runs as the compose "traffic" service or by hand
 ```
@@ -217,7 +217,7 @@ Every `TRAFFIC_INTERVAL` seconds (default 2): insert an observation of a random 
 - `mergeMs` lives in the writer's memory. A writer restart resets it to zero samples until the next flush.
 - A `kill -9` leaves nothing in `errors.jsonl`. The evidence is `processes: {"writer": "unreachable"}`.
 - The nightly reset drops every volume, so the slot goes too and the reader comes up on the phase 4 fresh-slot path (export snapshot, backfill, stream). That path runs every night.
-- Only the `reader` service has a `build:` key; the others reuse `image: bartie:local`. `up -d --build <service>` on another service does not rebuild. Use `up -d --build` with no service name.
+- Only the `reader` service has a `build:` key; the others reuse `image: superbartie:local`. `up -d --build <service>` on another service does not rebuild. Use `up -d --build` with no service name.
 - `/demo/poke` writes to a public database. Three fences: table and column allowlist, pk range 9000..9099, per-IP rate limit. Never raw SQL.
 
 ## The site (me_me_me repo)
@@ -228,8 +228,8 @@ src/components/bartie-live.tsx       the console: status strip, 1 watch rows lan
                                      3 ask live vs batch, 4 verify
 src/components/bartie-data.tsx       the data browser: table tabs incl. bartie_vectors, newest/by-id, 50 per page, counts
 src/components/data-table.tsx        shared tables: planColumns, SideTable ("fit" and "scroll" layouts, sticky pk)
-src/app/bartie/live/page.tsx         /bartie/live
-src/app/bartie/data/page.tsx         /bartie/data
+src/app/super-bartie/live/page.tsx         /super-bartie/live
+src/app/super-bartie/data/page.tsx         /super-bartie/data
 src/app/blog/[slug]/page.tsx         registers <BartieLive /> as an MDX component
 src/content/blog/bartie-postgres-cdc.mdx   "Try it live" section embedding the console
 ```
