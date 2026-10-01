@@ -1,6 +1,8 @@
 # Super Bartie
 
-[Bartie](https://github.com/BABTUNA/Bartie) is a small change data capture engine: it reads a Postgres write-ahead log and keeps a live copy of the tables in a second database, without losing or duplicating a change. Super Bartie is that same engine, unchanged, running as a service: a control API that says where the lag is, a second destination that turns every change into a vector for retrieval, an MCP server so an agent can operate it, and a deployment you can open in a browser.
+Super Bartie is a follow-up to [Bartie](https://github.com/BABTUNA/Bartie), a small Postgres CDC engine I built to understand how [Artie](https://artie.com) works. Bartie reads a Postgres write-ahead log and keeps a copy of the tables in a second database. It ran from a terminal.
+
+This repo keeps that engine as it was and adds the parts around it: an API for checking on the pipeline, a second destination that stores vectors, an MCP server, and a deployment.
 
 ```text
 source Postgres ──WAL──▶ reader ──▶ Redpanda ──┬──▶ writer ────▶ destination Postgres (tables)
@@ -9,11 +11,11 @@ source Postgres ──WAL──▶ reader ──▶ Redpanda ──┬──▶ 
                                      api: usage, error logs, verify, /ask, demo pokes
 ```
 
-Built as a study of how systems like [Artie](https://artie.com) work. The source fixture is Artie's own [terra](https://github.com/artie-labs/terra) demo dataset, run unmodified. The reader, writer, backfill, and verify are Bartie's and are documented in that repo's writeup; everything in the "Control api, vector destination, MCP" section below is what this repo adds.
+The source data is Artie's own [terra](https://github.com/artie-labs/terra) demo dataset, run unmodified. The reader, writer, backfill, and verify come from Bartie and are covered in that repo. What this repo adds is in the "Control api, vector destination, MCP" section below.
 
 ### ▶ Live
 
-The pipeline runs on a small VM with a page in front of it: [babtuna.vercel.app/super-bartie/live](https://babtuna.vercel.app/super-bartie/live). Watch rows land on both sides, change a row on the source, ask the same question of a vector copy that is seconds behind the source and of a five-minute snapshot, and run a full-table checksum. [babtuna.vercel.app/super-bartie/data](https://babtuna.vercel.app/super-bartie/data) browses both databases side by side. Everything on those pages is a plain call to the control api below.
+The pipeline is running at [babtuna.vercel.app/super-bartie/live](https://babtuna.vercel.app/super-bartie/live). You can watch rows get replicated, change a row, ask a question against a live copy and a five-minute-old snapshot, and run a checksum of every table. [babtuna.vercel.app/super-bartie/data](https://babtuna.vercel.app/super-bartie/data) shows both databases next to each other. Both pages call the api described below.
 
 ### ▶ Demo video (the engine)
 
@@ -98,11 +100,11 @@ Laptop numbers (a colima VM, single Redpanda broker, Postgres to Postgres); the 
 
 ## Control api, vector destination, MCP
 
-Three additions sit next to the pipeline without changing the reader or writer. Each has its own doc: [control API and deployment](docs/phase-6-control-api.md), [vector destination and live RAG](docs/phase-7-vector-destination.md), [MCP server](docs/phase-8-mcp.md).
+These three sit next to the pipeline. The reader and writer did not change. Each has its own doc: [control API and deployment](docs/phase-6-control-api.md), [vector destination](docs/phase-7-vector-destination.md), [MCP server](docs/phase-8-mcp.md).
 
-- **`cmd/api`** exposes the running pipeline over HTTP with Artie's API paths (`/pipelines`, `/pipelines/{uuid}/usage`, `/error-logs`, `/status`) plus what their product cannot read: `POST /pipelines/{uuid}/verify` (source-vs-destination checksum) and a lag breakdown. `usage` returns Artie's per-table `tableStats` and also `readerLagBytes`, `backlogMessages`, and `mergeMs`, so a reader can name the bottleneck (reader, broker, or destination) instead of just the number. Each pipeline process serves flush timings and phase on a localhost port; errors go to a shared JSONL file that outlives the process.
-- **`cmd/vecwriter`** is a second consumer group on the same topic that embeds `animals` and `observations` into a pgvector table, committing offsets only after the vector transaction commits. `POST /ask` embeds a question, does a top-5 cosine search, and answers with Claude (or returns the top record when no key is set). `mode=live` reads the vector table; `mode=batch` reads a snapshot refreshed on a timer, standing in for nightly ETL. The default embedder is a free deterministic hash, so the whole stack runs with no credentials; `MINICDC_EMBED_PROVIDER=openai|voyage` upgrades it.
-- **`mcp/`** is an MCP server generated from `mcp/openapi.yaml` the way [artie-mcp](https://github.com/artie-labs/artie-mcp) generates its tools from Artie's spec. The operationIds are Artie MCP's tool names (`pipeline_list`, `pipeline_usage`, ...) plus `pipeline_verify` and `destination_ask`. It ships as a Claude Code plugin with a monitoring skill whose triage table turns the three lag numbers into a named bottleneck, and a test that fails when a skill names a tool the contract lacks or the contract gains a tool no skill documents.
+- **`cmd/api`** is an HTTP server for checking on the pipeline. It uses the same URL layout as Artie's public API (`/pipelines`, `/pipelines/{uuid}/usage`, `/error-logs`, `/status`) and adds `POST /pipelines/{uuid}/verify`, which compares checksums of every table in both databases. `usage` returns latency per table like Artie's does, plus `readerLagBytes`, `backlogMessages`, and `mergeMs`. When the pipeline is slow, one of those three goes up, and that tells you whether the reader, the writer, or the destination is the slow part.
+- **`cmd/vecwriter`** is a second consumer on the same topic. It embeds each `animals` and `observations` row and stores it in a pgvector table, and it commits Kafka offsets after the database transaction, the same way the writer does. `POST /ask` embeds a question, finds the five closest rows, and answers from them. `mode=live` searches the vector table and `mode=batch` searches a snapshot that refreshes every five minutes. The default embedder is a keyword hash that needs no API key. Set `MINICDC_EMBED_PROVIDER` to `openai` or `voyage` for a real model.
+- **`mcp/`** is an MCP server generated from `mcp/openapi.yaml`, which is how [artie-mcp](https://github.com/artie-labs/artie-mcp) builds its tools. The tool names match Artie's (`pipeline_list`, `pipeline_usage`, and so on), with two extra: `pipeline_verify` and `destination_ask`. It comes with a Claude Code plugin, a monitoring skill, and a test that fails when a skill mentions a tool that is not in the spec.
 
 ```bash
 claude plugin marketplace add BABTUNA/SuperBartie
