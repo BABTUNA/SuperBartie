@@ -98,7 +98,7 @@ Laptop numbers (a colima VM, single Redpanda broker, Postgres to Postgres); the 
 
 ## Control api, vector destination, MCP
 
-Three additions sit next to the pipeline without changing the reader or writer (design in [docs/phase-6-live.md](docs/phase-6-live.md)):
+Three additions sit next to the pipeline without changing the reader or writer. Each has its own doc: [control API and deployment](docs/phase-6-control-api.md), [vector destination and live RAG](docs/phase-7-vector-destination.md), [MCP server](docs/phase-8-mcp.md).
 
 - **`cmd/api`** exposes the running pipeline over HTTP with Artie's API paths (`/pipelines`, `/pipelines/{uuid}/usage`, `/error-logs`, `/status`) plus what their product cannot read: `POST /pipelines/{uuid}/verify` (source-vs-destination checksum) and a lag breakdown. `usage` returns Artie's per-table `tableStats` and also `readerLagBytes`, `backlogMessages`, and `mergeMs`, so a reader can name the bottleneck (reader, broker, or destination) instead of just the number. Each pipeline process serves flush timings and phase on a localhost port; errors go to a shared JSONL file that outlives the process.
 - **`cmd/vecwriter`** is a second consumer group on the same topic that embeds `animals` and `observations` into a pgvector table, committing offsets only after the vector transaction commits. `POST /ask` embeds a question, does a top-5 cosine search, and answers with Claude (or returns the top record when no key is set). `mode=live` reads the vector table; `mode=batch` reads a snapshot refreshed on a timer, standing in for nightly ETL. The default embedder is a free deterministic hash, so the whole stack runs with no credentials; `MINICDC_EMBED_PROVIDER=openai|voyage` upgrades it.
@@ -155,4 +155,4 @@ The scripts are three complete demos; the binaries are the system they drive (ru
 
 ## How it's built
 
-Six phases, each with a function trace and the data shapes flowing through it, in [docs/](docs/): the flowing skeleton, correctness via staging merge, recovery, backfill, schema evolution plus benchmarking, and the live deployment (control api, vector destination, MCP). The design keeps the writer ignorant of the source: every change (insert, update, delete, and snapshot read) is the same self-describing JSON event, so backfill and streaming share one apply path.
+Eight phases, each with a function trace and the data shapes flowing through it, in [docs/](docs/): the flowing skeleton, correctness via staging merge, recovery, backfill, schema evolution plus benchmarking, the control API and live deployment, the vector destination, and the MCP server. The design keeps the writer ignorant of the source: every change (insert, update, delete, and snapshot read) is the same self-describing JSON event, so backfill and streaming share one apply path.
