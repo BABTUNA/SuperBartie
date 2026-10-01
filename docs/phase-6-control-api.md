@@ -223,18 +223,18 @@ Every `TRAFFIC_INTERVAL` seconds (default 2): insert an observation of a random 
 ## The site (me_me_me repo)
 
 ```text
-src/lib/bartie.ts                    NEXT_PUBLIC_BARTIE_API_URL, default http://localhost:8088
-src/components/bartie-live.tsx       the console: status strip, 1 watch rows land (+ traffic switch), 2 change a row,
-                                     3 ask live vs batch, 4 verify
-src/components/bartie-data.tsx       the data browser: table tabs incl. bartie_vectors, newest/by-id, 50 per page, counts
-src/components/data-table.tsx        shared tables: planColumns, SideTable ("fit" and "scroll" layouts, sticky pk)
+src/lib/super-bartie.ts                    NEXT_PUBLIC_SUPER_BARTIE_API_URL, default http://localhost:8088
+src/components/super-bartie-live.tsx       the console: status strip, 1 watch rows land (+ traffic switch), 2 change a row,
+                                           3 ask live vs batch, 4 verify
+src/components/super-bartie-data.tsx       the data browser: table tabs incl. bartie_vectors, newest/by-id, 50 per page, counts
+src/components/data-table.tsx              shared tables: planColumns, SideTable ("fit" and "scroll" layouts, sticky pk)
 src/app/super-bartie/live/page.tsx         /super-bartie/live
 src/app/super-bartie/data/page.tsx         /super-bartie/data
-src/app/blog/[slug]/page.tsx         registers <BartieLive /> as an MDX component
-src/content/blog/bartie-postgres-cdc.mdx   "Try it live" section embedding the console
+src/app/blog/[slug]/page.tsx               registers <SuperBartieLive /> as an MDX component
+src/content/blog/super-bartie.mdx          the Super Bartie article, with the console embedded
 ```
 
-Everything the pages do is a plain `fetch` to the api from the browser, so the api's CORS allowlist must include the site's origin. The traffic switch sends `Authorization: Bearer` from `localStorage.bartie_token` when present; with `MINICDC_API_TOKEN` set, visitors see the state and only the owner can flip it.
+The original Bartie article (`bartie-postgres-cdc.mdx`) is separate and has no console; it covers the engine. Everything the pages do is a plain `fetch` to the api from the browser, so the api's CORS allowlist must include the site's origin. The traffic switch sends `Authorization: Bearer` from `localStorage.bartie_token` when present; with `MINICDC_API_TOKEN` set, visitors see the state and only the owner can flip it.
 
 ## Components
 
@@ -252,7 +252,7 @@ Tests added: `internal/api` (pk fence, rate limiter, window parsing, uuid guard)
 
 ## Not done
 
-**Not deployed.** Everything above runs on a laptop. Going live needs a domain for `API_DOMAIN`, a VM running `deploy/vm/bootstrap.sh`, `NEXT_PUBLIC_BARTIE_API_URL` on Vercel, and the site origin in `MINICDC_CORS_ORIGINS`.
+**Not deployed.** Everything above runs on a laptop. Going live needs a domain for `API_DOMAIN`, a VM running `deploy/vm/bootstrap.sh`, `NEXT_PUBLIC_SUPER_BARTIE_API_URL` on Vercel, and the site origin in `MINICDC_CORS_ORIGINS`.
 
 ## Explicitly out of scope
 
