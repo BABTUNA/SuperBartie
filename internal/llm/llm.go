@@ -51,8 +51,10 @@ func (c *claude) Answer(ctx context.Context, question string, contexts []string)
 	fmt.Fprintf(&b, "\nQuestion: %s", question)
 
 	resp, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
-		Model:        anthropic.Model(c.model),
-		MaxTokens:    512,
+		Model: anthropic.Model(c.model),
+		// thinking is always on for this model and counts against the limit
+		// leave room for it so a short answer is never cut off before it starts
+		MaxTokens:    4096,
 		System:       []anthropic.TextBlockParam{{Text: system}},
 		OutputConfig: anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortLow},
 		Messages: []anthropic.MessageParam{
