@@ -10,6 +10,11 @@
 #
 #     docker compose --profile live up -d --build
 #
+# Only 80 and 443 (Caddy) listen on every interface. The databases, the broker,
+# and the plain-http port are bound to 127.0.0.1: Docker publishes ports past
+# the host firewall, so anything bound wider would be reachable from the
+# internet on a VM, with the demo passwords in this file.
+#
 # Run ./fetch-terra.sh once first: it clones artie-labs/terra, whose init SQL
 # (schema + seed + publication) is mounted into the source container.
 # Its own compose project, so it never shares containers or volumes with the
@@ -32,7 +37,7 @@ services:
       - "-c"
       - "max_replication_slots=10"
     ports:
-      - "5410:5432"
+      - "127.0.0.1:5410:5432"
     volumes:
       - ./terra/pg/init:/docker-entrypoint-initdb.d:ro
       - source_pgdata:/var/lib/postgresql/data
@@ -56,7 +61,7 @@ services:
       - --kafka-addr=INTERNAL://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
       - --advertise-kafka-addr=INTERNAL://redpanda:9092,OUTSIDE://localhost:19092
     ports:
-      - "19092:19092"
+      - "127.0.0.1:19092:19092"
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
       interval: 2s
@@ -73,7 +78,7 @@ services:
       POSTGRES_PASSWORD: bartie
       POSTGRES_DB: warehouse
     ports:
-      - "5411:5432"
+      - "127.0.0.1:5411:5432"
     volumes:
       - dest_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -199,7 +204,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "8088:8088"
+      - "127.0.0.1:8088:8088"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

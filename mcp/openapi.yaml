@@ -8,7 +8,7 @@ info:
     Artie MCP knows this one. Two tools have no Artie equivalent because Artie's
     product cannot read the destination: pipeline_verify and destination_ask.
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8088
 
 paths:
   /pipelines:

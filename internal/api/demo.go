@@ -516,3 +516,41 @@ func (s *Server) handleDemoPause(w http.ResponseWriter, r *http.Request) {
 		"pausedUntil": time.Now().UTC().Add(demoPauseSeconds * time.Second),
 	})
 }
+
+// --- holding traffic still for verify --------------------------------------
+
+// with a write every two seconds and a two second flush, a row is almost always in flight
+// so a checksum of a busy pipeline rarely matches even when nothing is wrong
+// verify asks the traffic writer to wait while it checks, then lets it go
+//
+// this is a second marker file, separate from the pause switch
+// the page keeps showing traffic as on, because from a visitor's view it is
+func (s *Server) trafficHoldFile() string {
+	return filepath.Join(filepath.Dir(s.cfg.ErrorLogPath), "traffic.hold")
+}
+
+// holdTraffic stops the traffic writer until the returned func is called
+// calls nest, the writer resumes when the last holder lets go
+// the script ignores a hold older than a minute, so a crash here cannot stall it for good
+func (s *Server) holdTraffic() (release func()) {
+	path := s.trafficHoldFile()
+	s.holdMu.Lock()
+	s.holds++
+	if s.holds == 1 {
+		_ = os.MkdirAll(filepath.Dir(path), 0o755)
+		_ = os.WriteFile(path, []byte(time.Now().UTC().Format(time.RFC3339)+"\n"), 0o644)
+	}
+	s.holdMu.Unlock()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			s.holdMu.Lock()
+			s.holds--
+			if s.holds == 0 {
+				_ = os.Remove(path)
+			}
+			s.holdMu.Unlock()
+		})
+	}
+}

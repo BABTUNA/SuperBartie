@@ -347,9 +347,10 @@ func (k *kafkaLag) fetch(ctx context.Context, group string) ConsumerInfo {
 
 // --- verify ----------------------------------------------------------------
 
-// handleVerify is a single pass by default. A live pipeline always has events
-// in flight, so a mismatch a moment after a write is expected; `?timeout=10s`
-// retries until match or deadline, which is what "did it converge" means.
+// handleVerify is a single pass by default
+// a live pipeline always has events in flight, so a mismatch right after a write is expected
+// with ?timeout=10s it holds the demo traffic still and retries until match or deadline
+// which is what "did it converge" means
 func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
@@ -364,6 +365,9 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "timeout must be a duration up to 45s, e.g. 10s")
 			return
 		}
+		// hold the traffic writer still so in-flight rows can land and the check can settle
+		release := s.holdTraffic()
+		defer release()
 		res, err = verify.Converge(ctx, s.cfg, wait)
 	} else {
 		res, err = verify.Compare(ctx, s.cfg)

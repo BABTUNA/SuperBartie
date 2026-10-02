@@ -4,8 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/BABTUNA/superbartie/internal/config"
 )
 
 func TestPokeIDAndScope(t *testing.T) {
@@ -137,5 +141,33 @@ func TestPipelineUUIDGuard(t *testing.T) {
 	mux.ServeHTTP(rr, httptest.NewRequest("GET", "/pipelines/bartie", nil))
 	if rr.Code != 200 {
 		t.Fatalf("known uuid: %d", rr.Code)
+	}
+}
+
+func TestHoldTrafficNestsAndReleases(t *testing.T) {
+	dir := t.TempDir()
+	s := &Server{cfg: config.Config{ErrorLogPath: filepath.Join(dir, "errors.jsonl")}}
+	exists := func() bool { _, err := os.Stat(s.trafficHoldFile()); return err == nil }
+
+	a := s.holdTraffic()
+	if !exists() {
+		t.Fatal("first hold should create the marker")
+	}
+	b := s.holdTraffic()
+	a()
+	if !exists() {
+		t.Fatal("marker must stay while another verify still holds it")
+	}
+	a() // releasing twice must not let go of someone else's hold
+	if !exists() {
+		t.Fatal("double release dropped the second hold")
+	}
+	b()
+	if exists() {
+		t.Fatal("last release should remove the marker")
+	}
+	// the pause switch is a different file and is not touched by a hold
+	if s.trafficHoldFile() == s.trafficPauseFile() {
+		t.Fatal("hold and pause must be separate markers")
 	}
 }

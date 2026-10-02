@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,6 +37,10 @@ type Server struct {
 	kafka  *kafkaLag
 	demo   *demoLimiter
 	asker  Asker // nil until 6b wires one in
+
+	// counts verify calls currently holding the traffic writer still
+	holdMu sync.Mutex
+	holds  int
 }
 
 // Asker answers a natural-language question from the vector destination.

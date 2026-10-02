@@ -96,10 +96,11 @@ The site (me_me_me repo) has two pages over this api: `/super-bartie/live` (the 
 
 ## Gotchas found while building
 
-- A single verify pass right after a write mismatches, correctly: the event is in flight. `timeout` retries until it converges.
+- A single verify pass right after a write mismatches, correctly: the event is in flight. With a write every 2s and a 2s flush that is almost always the case, so `timeout` holds the traffic writer still while it retries. A real system would compare both sides at one WAL position instead of quieting the source.
 - `readerLagBytes` never sits at zero. WAL records that are not row changes give it a small floor. Growing is the signal, not non-zero.
 - The lag numbers only mean something when one of them moves. `/demo/pause` stops the writer for 15 seconds so backlog climbs while reader lag stays flat. The writer holds the timer, so a visitor who clicks and leaves cannot leave it stuck.
 - `kill -9` leaves nothing in the error log. The evidence is the process showing as `unreachable`.
+- Docker publishes ports past the host firewall. The databases and the broker are bound to 127.0.0.1 in the compose file so only Caddy's 80 and 443 are reachable on a VM.
 - `docker kill` is a manual stop, so the restart policy does not fire. A crash inside the container does restart it.
 - The nightly reset drops every volume, so the slot goes too and the reader runs the phase 4 fresh-slot backfill every night.
 

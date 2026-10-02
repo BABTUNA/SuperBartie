@@ -5,12 +5,12 @@
     "args": [
       "run",
       "--directory",
-      "${CLAUDE_PLUGIN_ROOT}/../..",
+      "${CLAUDE_PLUGIN_ROOT}",
       "python",
       "server.py"
     ],
     "env": {
-      "BARTIE_API_URL": "${BARTIE_API_URL:-http://localhost:8080}",
+      "BARTIE_API_URL": "${BARTIE_API_URL:-http://localhost:8088}",
       "BARTIE_API_TOKEN": "${BARTIE_API_TOKEN:-}"
     }
   }

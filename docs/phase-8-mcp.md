@@ -39,16 +39,18 @@ The `/demo/*` routes are left out of the contract on purpose. An agent has no bu
 ## Layout
 
 ```text
-.claude-plugin/marketplace.json           repo root
-mcp/openapi.yaml                          the contract, operationId = tool name
-mcp/server.py                             FastMCP.from_openapi(spec, httpx -> $BARTIE_API_URL)
-mcp/plugins/super-bartie/
-├── .mcp.json, .claude-plugin/plugin.json
+.claude-plugin/marketplace.json           repo root, points at ./mcp
+mcp/                                      the plugin: everything it needs is in this one directory
+├── .claude-plugin/plugin.json
+├── .mcp.json                             uv run --directory ${CLAUDE_PLUGIN_ROOT} python server.py
+├── openapi.yaml                          the contract, operationId = tool name
+├── server.py                             FastMCP.from_openapi(spec, httpx -> $BARTIE_API_URL)
 ├── agents/super-bartie.md
-└── skills/monitoring/SKILL.md            which call answers which question + the triage table
-    skills/verify/SKILL.md                when to pass timeout, how to read a mismatch
-mcp/tests/test_tools_match.py             the drift test
-mcp/tests/smoke_client.py                 lists and calls the tools over stdio
+├── skills/monitoring/SKILL.md            which call answers which question + the triage table
+├── skills/verify/SKILL.md                when to pass timeout, how to read a mismatch
+└── tests/
+    ├── test_tools_match.py               the drift test
+    └── smoke_client.py                   lists and calls the tools over stdio
 ```
 
 ## Core data shapes
@@ -71,6 +73,7 @@ It reads the backticked tool names out of the skills and the agent prompt and ch
 ## Gotchas found while building
 
 - FastMCP names tools from `mcp_names`, keyed by operationId. Without it the names come from the paths.
+- Installing a plugin copies only the plugin directory. The server has to live inside it, or the installed copy cannot find `server.py`. The first version kept the server two directories up and failed to connect after install.
 - A stdio subprocess does not inherit the parent's environment. `BARTIE_API_URL` has to be passed explicitly, as `.mcp.json` does.
 - A response schema that uses `allOf` comes back wrapped as `{"result": {...}}`. Harmless.
 
@@ -79,7 +82,7 @@ It reads the backticked tool names out of the skills and the agent prompt and ch
 | Piece | What changes |
 | --- | --- |
 | `mcp/openapi.yaml`, `mcp/server.py` | new: contract and the generated server |
-| `mcp/plugins/super-bartie/` | new: plugin, agent prompt, two skills |
+| `mcp/.claude-plugin`, `mcp/.mcp.json`, `mcp/agents`, `mcp/skills` | new: plugin manifest, agent prompt, two skills |
 | `mcp/tests/` | new: drift test and smoke client |
 | `.claude-plugin/marketplace.json` | new, at the repo root |
 

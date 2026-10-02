@@ -15,7 +15,7 @@ import unittest
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PLUGIN = ROOT / "plugins" / "super-bartie"
+PLUGIN = ROOT
 
 TOOL_RE = re.compile(r"`([a-z]+(?:_[a-z]+)+)`")
 

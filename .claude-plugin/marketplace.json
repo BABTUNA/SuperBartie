@@ -11,7 +11,7 @@
       "author": {
         "name": "Ben Barrera"
       },
-      "source": "./mcp/plugins/super-bartie",
+      "source": "./mcp",
       "category": "database"
     }
   ]

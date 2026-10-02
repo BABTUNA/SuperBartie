@@ -5,10 +5,10 @@ are Artie MCP's names wherever an equivalent exists.
 
 Run over stdio (what the Claude Code plugin does):
 
-    BARTIE_API_URL=http://localhost:8080 uv run python server.py
+    BARTIE_API_URL=http://localhost:8088 uv run python server.py
 
 Environment:
-    BARTIE_API_URL    Bartie control api base URL (default http://localhost:8080)
+    BARTIE_API_URL    control api base URL (default http://localhost:8088, the compose live profile)
     BARTIE_API_TOKEN  bearer token, only needed if the api was started with one
 """
 
@@ -23,7 +23,7 @@ from fastmcp import FastMCP
 from fastmcp.server.providers.openapi import MCPType
 
 HERE = pathlib.Path(__file__).resolve().parent
-API_URL = os.environ.get("BARTIE_API_URL", "http://localhost:8080").rstrip("/")
+API_URL = os.environ.get("BARTIE_API_URL", "http://localhost:8088").rstrip("/")
 API_TOKEN = os.environ.get("BARTIE_API_TOKEN", "")
 
 spec = yaml.safe_load((HERE / "openapi.yaml").read_text())

@@ -26,8 +26,14 @@ fi
 
 # The api pauses us by creating this file (POST /demo/traffic {"enabled": false})
 # and resumes by removing it. Checked before every write.
+#
+# Verify also asks us to hold still for a few seconds with a second file, so
+# rows in flight can land before it compares. A hold older than a minute is
+# ignored, so a crashed api can never stall the traffic for good.
+HOLD_FILE="$(dirname "$PAUSE_FILE")/traffic.hold"
+held() { [ -n "$(find "$HOLD_FILE" -mmin -1 2>/dev/null)" ]; }
 wait_if_paused() {
-  while [ -f "$PAUSE_FILE" ]; do sleep 1; done
+  while [ -f "$PAUSE_FILE" ] || held; do sleep 1; done
 }
 
 places=("the north ridge" "the south bank" "the reed bed" "the shallows" "the acacia line" "the dry channel" "the salt lick" "the far shore")
