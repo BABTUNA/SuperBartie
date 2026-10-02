@@ -40,7 +40,7 @@ cmd/api/main.go
     ├── POST /demo/poke                                   move one sighting on the SOURCE, place from a fixed list   internal/api/demo.go
     ├── GET  /demo/row/{table}/{pk}                       the same row from both databases
     ├── GET  /demo/table/{table}                          a page of rows + counts from both databases
-    ├── GET|POST /demo/traffic                            pause marker for the traffic writer
+    ├── GET|POST /demo/traffic                            anyone can pause the traffic writer, it resumes after 10 min
     └── POST /demo/pause                                  pauses the writer for 15s, it resumes itself
 
 internal/metrics/metrics.go                               one per process

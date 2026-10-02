@@ -97,7 +97,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /demo/row/{table}/{pk}", s.handleRow)
 	mux.HandleFunc("GET /demo/table/{table}", s.handleTable)
 	mux.HandleFunc("GET /demo/traffic", s.handleTrafficGet)
-	mux.HandleFunc("POST /demo/traffic", s.requireToken(s.handleTrafficSet))
+	mux.HandleFunc("POST /demo/traffic", s.demo.limit(s.handleTrafficSet))
 	mux.HandleFunc("POST /demo/pause", s.demo.limit(s.handleDemoPause))
 	mux.HandleFunc("POST /ask", s.demo.limit(s.handleAsk))
 

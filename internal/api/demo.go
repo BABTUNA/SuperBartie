@@ -456,9 +456,27 @@ func (s *Server) trafficPauseFile() string {
 	return filepath.Join(filepath.Dir(s.cfg.ErrorLogPath), "traffic.paused")
 }
 
+// how long traffic stays off after someone switches it off
+// anyone can flip the switch, so it turns itself back on
+// that way one visitor cannot leave the demo quiet for the next
+const trafficPauseMax = 10 * time.Minute
+
+// trafficEnabled is true when there is no pause marker or the marker has expired
+// the traffic script applies the same rule to the same file
+func (s *Server) trafficEnabled() bool {
+	info, err := os.Stat(s.trafficPauseFile())
+	if err != nil {
+		return true
+	}
+	if time.Since(info.ModTime()) > trafficPauseMax {
+		_ = os.Remove(s.trafficPauseFile())
+		return true
+	}
+	return false
+}
+
 func (s *Server) handleTrafficGet(w http.ResponseWriter, _ *http.Request) {
-	_, err := os.Stat(s.trafficPauseFile())
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": errors.Is(err, os.ErrNotExist)})
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": s.trafficEnabled()})
 }
 
 func (s *Server) handleTrafficSet(w http.ResponseWriter, r *http.Request) {

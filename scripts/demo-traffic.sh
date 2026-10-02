@@ -32,8 +32,11 @@ fi
 # ignored, so a crashed api can never stall the traffic for good.
 HOLD_FILE="$(dirname "$PAUSE_FILE")/traffic.hold"
 held() { [ -n "$(find "$HOLD_FILE" -mmin -1 2>/dev/null)" ]; }
+# Anyone can switch traffic off from the page, so a pause only lasts ten
+# minutes. After that we carry on, and the api reports traffic as on again.
+paused() { [ -n "$(find "$PAUSE_FILE" -mmin -10 2>/dev/null)" ]; }
 wait_if_paused() {
-  while [ -f "$PAUSE_FILE" ] || held; do sleep 1; done
+  while paused || held; do sleep 1; done
 }
 
 places=("the north ridge" "the south bank" "the reed bed" "the shallows" "the acacia line" "the dry channel" "the salt lick" "the far shore")

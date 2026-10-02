@@ -171,3 +171,27 @@ func TestHoldTrafficNestsAndReleases(t *testing.T) {
 		t.Fatal("hold and pause must be separate markers")
 	}
 }
+
+func TestTrafficPauseExpires(t *testing.T) {
+	dir := t.TempDir()
+	s := &Server{cfg: config.Config{ErrorLogPath: filepath.Join(dir, "errors.jsonl")}}
+	if !s.trafficEnabled() {
+		t.Fatal("no marker means traffic is on")
+	}
+	if err := os.WriteFile(s.trafficPauseFile(), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if s.trafficEnabled() {
+		t.Fatal("a fresh marker means traffic is off")
+	}
+	old := time.Now().Add(-trafficPauseMax - time.Minute)
+	if err := os.Chtimes(s.trafficPauseFile(), old, old); err != nil {
+		t.Fatal(err)
+	}
+	if !s.trafficEnabled() {
+		t.Fatal("an expired marker means traffic is back on")
+	}
+	if _, err := os.Stat(s.trafficPauseFile()); err == nil {
+		t.Fatal("an expired marker should be cleaned up")
+	}
+}
