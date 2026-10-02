@@ -486,3 +486,33 @@ func (s *Server) handleTrafficSet(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "enabled": *body.Enabled})
 }
+
+// --- timed pause -----------------------------------------------------------
+
+// how long a visitor's pause lasts
+// long enough to watch the backlog build, short enough that nobody is left waiting
+const demoPauseSeconds = 15
+
+// handleDemoPause stops the writer for a few seconds so the lag numbers visibly move
+// the writer resumes itself, so a visitor who clicks and leaves cannot break the demo
+// open to anyone, unlike the untimed pause on /pipelines/{uuid}/status
+func (s *Server) handleDemoPause(w http.ResponseWriter, r *http.Request) {
+	body := fmt.Sprintf(`{"status":"paused","seconds":%d}`, demoPauseSeconds)
+	req, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, s.cfg.WriterMetricsURL+"/control", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.http.Do(req)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "writer unreachable: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		writeError(w, http.StatusBadGateway, fmt.Sprintf("writer returned %d", resp.StatusCode))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":     true,
+		"seconds":     demoPauseSeconds,
+		"pausedUntil": time.Now().UTC().Add(demoPauseSeconds * time.Second),
+	})
+}

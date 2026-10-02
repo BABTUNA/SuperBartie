@@ -40,7 +40,8 @@ cmd/api/main.go
     ├── POST /demo/poke                                   move one sighting on the SOURCE, place from a fixed list   internal/api/demo.go
     ├── GET  /demo/row/{table}/{pk}                       the same row from both databases
     ├── GET  /demo/table/{table}                          a page of rows + counts from both databases
-    └── GET|POST /demo/traffic                            pause marker for the traffic writer
+    ├── GET|POST /demo/traffic                            pause marker for the traffic writer
+    └── POST /demo/pause                                  pauses the writer for 15s, it resumes itself
 
 internal/metrics/metrics.go                               one per process
 ├── RecordFlush(table, events, dur)                       ring of 512; called from writer.flushAll
@@ -97,6 +98,7 @@ The site (me_me_me repo) has two pages over this api: `/super-bartie/live` (the 
 
 - A single verify pass right after a write mismatches, correctly: the event is in flight. `timeout` retries until it converges.
 - `readerLagBytes` never sits at zero. WAL records that are not row changes give it a small floor. Growing is the signal, not non-zero.
+- The lag numbers only mean something when one of them moves. `/demo/pause` stops the writer for 15 seconds so backlog climbs while reader lag stays flat. The writer holds the timer, so a visitor who clicks and leaves cannot leave it stuck.
 - `kill -9` leaves nothing in the error log. The evidence is the process showing as `unreachable`.
 - `docker kill` is a manual stop, so the restart policy does not fire. A crash inside the container does restart it.
 - The nightly reset drops every volume, so the slot goes too and the reader runs the phase 4 fresh-slot backfill every night.

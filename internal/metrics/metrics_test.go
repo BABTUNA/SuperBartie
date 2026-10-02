@@ -72,3 +72,31 @@ func TestPauseFlipsPhase(t *testing.T) {
 type errTest string
 
 func (e errTest) Error() string { return string(e) }
+
+func TestPauseForLiftsOnItsOwn(t *testing.T) {
+	until := PauseFor(60 * time.Millisecond)
+	snap := TakeSnapshot()
+	if !Paused() || snap.PausedUntil == nil || !snap.PausedUntil.Equal(until) {
+		t.Fatalf("timed pause not reflected: paused=%v until=%v", Paused(), snap.PausedUntil)
+	}
+	time.Sleep(150 * time.Millisecond)
+	if Paused() || TakeSnapshot().PausedUntil != nil || TakeSnapshot().Phase != "running" {
+		t.Fatal("timed pause did not lift")
+	}
+}
+
+func TestExplicitResumeCancelsTimedPause(t *testing.T) {
+	PauseFor(time.Hour)
+	SetPaused(false)
+	if Paused() || TakeSnapshot().PausedUntil != nil {
+		t.Fatal("resume did not clear the timed pause")
+	}
+	// a plain pause after a timed one must not be lifted by the old timer
+	PauseFor(40 * time.Millisecond)
+	SetPaused(true)
+	time.Sleep(100 * time.Millisecond)
+	if !Paused() {
+		t.Fatal("old timer lifted an untimed pause")
+	}
+	SetPaused(false)
+}

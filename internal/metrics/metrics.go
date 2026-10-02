@@ -46,8 +46,12 @@ type Snapshot struct {
 	StartedAt time.Time `json:"startedAt"`
 	Phase     string    `json:"phase"` // reader: backfill | streaming; writer: running | paused
 	Paused    bool      `json:"paused"`
-	Flushes   []Flush   `json:"flushes"`
-	MergeMs   MergeMs   `json:"mergeMs"`
+
+	// set when the pause is timed and will lift on its own
+	PausedUntil *time.Time `json:"pausedUntil,omitempty"`
+
+	Flushes []Flush `json:"flushes"`
+	MergeMs MergeMs `json:"mergeMs"`
 }
 
 // MergeMs summarizes recent flush durations. Zero Samples means the writer has
@@ -69,6 +73,12 @@ var (
 	errPath   string
 
 	paused atomic.Bool
+
+	// when a timed pause ends, zero when not paused or paused with no end
+	pausedUntil time.Time
+
+	// lifts a timed pause, replaced or stopped whenever the pause state changes
+	resumeTimer *time.Timer
 )
 
 // Init names the process and picks the error log path. Call once from main.
@@ -90,7 +100,41 @@ func SetPhase(p string) {
 
 func Paused() bool { return paused.Load() }
 
+// SetPaused pauses or resumes with no time limit
+// it cancels any timed pause that was running
 func SetPaused(v bool) {
+	mu.Lock()
+	if resumeTimer != nil {
+		resumeTimer.Stop()
+		resumeTimer = nil
+	}
+	pausedUntil = time.Time{}
+	mu.Unlock()
+	setPaused(v)
+}
+
+// PauseFor pauses now and resumes on its own after d
+// the process resumes itself, so a caller that goes away cannot leave it stuck
+func PauseFor(d time.Duration) time.Time {
+	until := time.Now().Add(d)
+	mu.Lock()
+	if resumeTimer != nil {
+		resumeTimer.Stop()
+	}
+	pausedUntil = until
+	resumeTimer = time.AfterFunc(d, func() {
+		mu.Lock()
+		pausedUntil = time.Time{}
+		resumeTimer = nil
+		mu.Unlock()
+		setPaused(false)
+	})
+	mu.Unlock()
+	setPaused(true)
+	return until
+}
+
+func setPaused(v bool) {
 	paused.Store(v)
 	if v {
 		SetPhase("paused")
@@ -177,6 +221,10 @@ func TakeSnapshot() Snapshot {
 		Paused:    paused.Load(),
 		Flushes:   append([]Flush(nil), flushes...),
 	}
+	if !pausedUntil.IsZero() {
+		t := pausedUntil
+		out.PausedUntil = &t
+	}
 	out.MergeMs = summarize(out.Flushes)
 	return out
 }
@@ -212,6 +260,9 @@ func Handler(controllable bool) http.Handler {
 		mux.HandleFunc("POST /control", func(w http.ResponseWriter, r *http.Request) {
 			var body struct {
 				Status string `json:"status"`
+
+				// optional, makes the pause lift on its own after this many seconds
+				Seconds int `json:"seconds"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				http.Error(w, "bad json", http.StatusBadRequest)
@@ -219,7 +270,11 @@ func Handler(controllable bool) http.Handler {
 			}
 			switch body.Status {
 			case "paused":
-				SetPaused(true)
+				if body.Seconds > 0 {
+					PauseFor(time.Duration(body.Seconds) * time.Second)
+				} else {
+					SetPaused(true)
+				}
 			case "running":
 				SetPaused(false)
 			default:

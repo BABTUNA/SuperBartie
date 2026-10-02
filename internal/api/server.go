@@ -93,6 +93,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /demo/table/{table}", s.handleTable)
 	mux.HandleFunc("GET /demo/traffic", s.handleTrafficGet)
 	mux.HandleFunc("POST /demo/traffic", s.requireToken(s.handleTrafficSet))
+	mux.HandleFunc("POST /demo/pause", s.demo.limit(s.handleDemoPause))
 	mux.HandleFunc("POST /ask", s.demo.limit(s.handleAsk))
 
 	return s.cors(mux)
@@ -161,6 +162,9 @@ type PipelineSummary struct {
 	IsDeploying          bool   `json:"isDeploying"`
 	HasBackfillingTables bool   `json:"hasBackfillingTables"`
 	HasUndeployedChanges bool   `json:"hasUndeployedChanges"`
+
+	// set while a timed pause is running, the writer resumes itself at this time
+	PausedUntil *time.Time `json:"pausedUntil,omitempty"`
 }
 
 type PipelineDetail struct {
@@ -220,6 +224,7 @@ func (s *Server) summary(ctx context.Context) PipelineSummary {
 	if snap, err := s.scrape(ctx, s.cfg.WriterMetricsURL); err == nil {
 		if snap.Paused {
 			sum.Status = "paused"
+			sum.PausedUntil = snap.PausedUntil
 		} else {
 			sum.Status = "running"
 		}
