@@ -40,9 +40,10 @@ cmd/vecwriter/main.go
 
 internal/api/ask.go
 ├── Ask(question, mode)
-│   ├── emb.Embed([question])
-│   ├── SELECT ... ORDER BY embedding <=> $1 LIMIT 5      bartie_vectors or bartie_vectors_snapshot
-│   └── llm.Answer(question, texts)                       internal/llm
+│   ├── keywordSearch(question)                           rows that share words with the question, rare words count more
+│   ├── emb.Embed([question]) + ORDER BY embedding <=> $1 the five nearest vectors
+│   ├── merge, keyword hits first, each row once          bartie_vectors or bartie_vectors_snapshot
+│   └── llm.Answer(question, texts)                       internal/llm, each row clipped to 700 chars
 └── snapshotLoop()                                        TRUNCATE + INSERT SELECT every MINICDC_SNAPSHOT_INTERVAL
 ```
 
@@ -94,7 +95,7 @@ In batch mode `asOf` is the snapshot time and `staleBy` is seconds since it.
 - An update that does not resend `notes` (TOAST-unchanged) is skipped: the text did not arrive and did not change.
 - The two consumers are not ordered against each other. An observation can arrive before its animal, and the document then says "animal 42" until the row is next touched.
 - `pipeline_usage` must not count `bartie_vectors` as a replicated table.
-- With the hash embedder, "which animals are lions?" retrieves poorly and "observation 9001 Mosi" retrieves exactly. Enough for live versus batch; a real model fixes the rest.
+- Vector search alone lost the demo row once the table passed a few thousand rows, and plain word-frequency ranking put long seed rows above it. `/ask` now also runs a keyword search that weights each word by how few rows contain it, so "9001" outweighs "seen", and merges the two. That fixed both "observation 9001" and "which animals are lions?" with the keyword-hash embedder.
 
 ## Components
 

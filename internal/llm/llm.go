@@ -31,8 +31,8 @@ func New(cfg config.Config) Client {
 }
 
 const system = `You answer questions about a wildlife tracking database using ONLY the records provided.
-Records are the current state of the data as of the moment of the question; the data changes in real time.
-Answer in one or two plain sentences. Cite the record you used by its id (e.g. "observation 5512").
+Answer in one sentence when you can, two at most. Name the record you used by its id, like "observation 5512".
+Do not comment on records that are not part of the answer.
 If the records do not contain the answer, say so in one sentence. Never guess.`
 
 type claude struct {
@@ -50,17 +50,22 @@ func (c *claude) Answer(ctx context.Context, question string, contexts []string)
 	}
 	fmt.Fprintf(&b, "\nQuestion: %s", question)
 
-	resp, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
+	params := anthropic.MessageNewParams{
 		Model: anthropic.Model(c.model),
-		// thinking is always on for this model and counts against the limit
+		// thinking is always on for the larger models and counts against the limit
 		// leave room for it so a short answer is never cut off before it starts
-		MaxTokens:    4096,
-		System:       []anthropic.TextBlockParam{{Text: system}},
-		OutputConfig: anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortLow},
+		MaxTokens: 4096,
+		System:    []anthropic.TextBlockParam{{Text: system}},
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(b.String())),
 		},
-	})
+	}
+	// low effort keeps the larger models quick on a question this small
+	// haiku does not accept the setting, and does not need it
+	if !strings.HasPrefix(c.model, "claude-haiku") {
+		params.OutputConfig = anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortLow}
+	}
+	resp, err := c.client.Messages.New(ctx, params)
 	if err != nil {
 		return "", fmt.Errorf("claude: %w", err)
 	}
